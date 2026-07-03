@@ -2,6 +2,9 @@
 
 一个完全在浏览器本地处理文件的中文 PDF 分割 PWA，适用于 macOS 和 iPhone。
 
+- 在线工具：https://pdf-splitter-kesheng.pages.dev
+- GitHub：https://github.com/Kkri2024/pdf-splitter-pwa
+
 ## 功能
 
 - 每 N 页分割一份
