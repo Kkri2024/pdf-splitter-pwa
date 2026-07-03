@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Archive,
+  CalendarClock,
   Check,
+  ChevronLeft,
   ChevronRight,
   Download,
   FileCheck2,
   FileText,
+  History as HistoryIcon,
   Info,
+  LockKeyhole,
+  Maximize2,
   PackageOpen,
   RefreshCw,
   Scissors,
@@ -22,7 +27,19 @@ import { useRegisterSW } from 'virtual:pwa-register/react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { createZip, shareOrDownloadPdf, triggerDownload } from './lib/download'
 import { formatFileSize } from './lib/format'
-import { loadPdfForPreview, renderThumbnails, type Thumbnail } from './lib/pdfPreview'
+import {
+  appendHistory,
+  clearHistory,
+  loadHistory,
+  removeHistory,
+  type HistoryEntry,
+} from './lib/history'
+import {
+  loadPdfForPreview,
+  renderPagePreview,
+  renderThumbnails,
+  type Thumbnail,
+} from './lib/pdfPreview'
 import {
   createSplitPlan,
   getPdfBaseName,
@@ -46,6 +63,13 @@ const modeOptions: Array<{ value: SplitMode; label: string; description: string 
   { value: 'custom', label: '自定义', description: '指定页码范围' },
 ]
 
+const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof PdfSplitError || error instanceof Error) return error.message
   return '操作失败，请重新选择文件后再试'
@@ -66,15 +90,33 @@ function App() {
   const [online, setOnline] = useState(navigator.onLine)
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [showInstallHelp, setShowInstallHelp] = useState(false)
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>(() => loadHistory())
+  const [showHistory, setShowHistory] = useState(false)
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false)
+  const [previewPage, setPreviewPage] = useState<number | null>(null)
+  const [previewImage, setPreviewImage] = useState('')
+  const [previewLoading, setPreviewLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const generationRef = useRef(0)
   const previewDocumentRef = useRef<PDFDocumentProxy | null>(null)
   const thumbnailUrlsRef = useRef<string[]>([])
+  const pagePreviewUrlRef = useRef('')
+  const pagePreviewGenerationRef = useRef(0)
+  const touchStartXRef = useRef<number | null>(null)
 
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW()
+
+  const closePagePreview = useCallback(() => {
+    pagePreviewGenerationRef.current += 1
+    if (pagePreviewUrlRef.current) URL.revokeObjectURL(pagePreviewUrlRef.current)
+    pagePreviewUrlRef.current = ''
+    setPreviewImage('')
+    setPreviewLoading(false)
+    setPreviewPage(null)
+  }, [])
 
   const cleanupPreview = useCallback(() => {
     generationRef.current += 1
@@ -83,7 +125,8 @@ function App() {
     setThumbnails([])
     if (previewDocumentRef.current) void previewDocumentRef.current.destroy()
     previewDocumentRef.current = null
-  }, [])
+    closePagePreview()
+  }, [closePagePreview])
 
   const clearAll = useCallback(() => {
     cleanupPreview()
@@ -116,8 +159,64 @@ function App() {
   useEffect(() => () => {
     generationRef.current += 1
     thumbnailUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+    if (pagePreviewUrlRef.current) URL.revokeObjectURL(pagePreviewUrlRef.current)
     if (previewDocumentRef.current) void previewDocumentRef.current.destroy()
   }, [])
+
+  useEffect(() => {
+    if (previewPage === null || !previewDocumentRef.current) return
+    const previewGeneration = pagePreviewGenerationRef.current + 1
+    pagePreviewGenerationRef.current = previewGeneration
+    if (pagePreviewUrlRef.current) URL.revokeObjectURL(pagePreviewUrlRef.current)
+    pagePreviewUrlRef.current = ''
+    setPreviewImage('')
+    setPreviewLoading(true)
+
+    const targetWidth = Math.min(window.innerWidth - 48, 1120)
+    void renderPagePreview(
+      previewDocumentRef.current,
+      previewPage,
+      targetWidth,
+      () => previewGeneration !== pagePreviewGenerationRef.current,
+    ).then((preview) => {
+      if (!preview || previewGeneration !== pagePreviewGenerationRef.current) {
+        if (preview?.url) URL.revokeObjectURL(preview.url)
+        return
+      }
+      pagePreviewUrlRef.current = preview.url
+      setPreviewImage(preview.url)
+      setPreviewLoading(false)
+    }).catch((previewError) => {
+      if (previewGeneration === pagePreviewGenerationRef.current) {
+        setPreviewLoading(false)
+        setError(getErrorMessage(previewError))
+      }
+    })
+  }, [previewPage])
+
+  useEffect(() => {
+    const dialogOpen = showHistory || previewPage !== null || showInstallHelp
+    if (!dialogOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [previewPage, showHistory, showInstallHelp])
+
+  useEffect(() => {
+    if (!showHistory && previewPage === null) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (previewPage !== null) closePagePreview()
+        else setShowHistory(false)
+      }
+      if (previewPage !== null && source) {
+        if (event.key === 'ArrowLeft' && previewPage > 1) setPreviewPage(previewPage - 1)
+        if (event.key === 'ArrowRight' && previewPage < source.pageCount) setPreviewPage(previewPage + 1)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [closePagePreview, previewPage, showHistory, source])
 
   const processFile = useCallback(async (file?: File) => {
     if (!file || busy !== 'idle') return
@@ -204,6 +303,20 @@ function App() {
         (current, total) => setProgress({ current, total }),
       )
       setOutputs(result)
+      const modeSummary = mode === 'fixed'
+        ? `每 ${pagesPerFile} 页一份`
+        : mode === 'each'
+          ? '逐页分割'
+          : `自定义：${rangeSpec}`
+      setHistoryEntries(appendHistory({
+        sourceName: source.file.name,
+        sourceSize: source.file.size,
+        pageCount: source.pageCount,
+        mode,
+        modeSummary,
+        outputCount: result.length,
+        outputBytes: result.reduce((total, output) => total + output.bytes.byteLength, 0),
+      }))
     } catch (splitError) {
       setOutputs([])
       setError(getErrorMessage(splitError))
@@ -238,6 +351,26 @@ function App() {
     }
   }
 
+  const movePreview = (direction: -1 | 1) => {
+    if (previewPage === null || !source) return
+    const nextPage = previewPage + direction
+    if (nextPage >= 1 && nextPage <= source.pageCount) setPreviewPage(nextPage)
+  }
+
+  const handlePreviewTouchEnd = (clientX: number) => {
+    if (touchStartXRef.current === null) return
+    const distance = clientX - touchStartXRef.current
+    touchStartXRef.current = null
+    if (Math.abs(distance) < 48) return
+    movePreview(distance > 0 ? -1 : 1)
+  }
+
+  const handleClearHistory = () => {
+    clearHistory()
+    setHistoryEntries([])
+    setConfirmClearHistory(false)
+  }
+
   const isBusy = busy !== 'idle'
   const splitButtonLabel = busy === 'splitting'
     ? `正在生成 ${progress.current}/${progress.total}`
@@ -255,6 +388,17 @@ function App() {
             {online ? <Wifi size={14} /> : <WifiOff size={14} />}
             {online ? '已联网' : '离线可用'}
           </span>
+          <button
+            className="icon-text-button history-button"
+            type="button"
+            onClick={() => { setShowHistory(true); setConfirmClearHistory(false) }}
+            aria-label={`历史记录，${historyEntries.length} 条`}
+            title="历史记录"
+          >
+            <HistoryIcon size={16} />
+            <span>历史</span>
+            {historyEntries.length > 0 && <b>{historyEntries.length}</b>}
+          </button>
           <button className="icon-text-button" type="button" onClick={handleInstall} aria-label="安装到设备" title="安装到设备">
             <Download size={16} />
             <span>安装</span>
@@ -265,7 +409,10 @@ function App() {
       <main className="workspace">
         <section className="intro" aria-labelledby="page-title">
           <div>
-            <p className="eyebrow"><ShieldCheck size={16} /> 本地处理，不上传文件</p>
+            <div className="privacy-row">
+              <p className="eyebrow"><ShieldCheck size={16} /> 本地处理，不上传文件</p>
+              <span className="privacy-chip"><LockKeyhole size={13} /> 无网络传输</span>
+            </div>
             <h1 id="page-title">拆分 PDF，清楚又利落</h1>
           </div>
           <p className="intro-copy">选择一个文件，按固定页数、逐页或自定义范围生成新的 PDF。</p>
@@ -407,14 +554,21 @@ function App() {
               <section className="preview-panel" aria-labelledby="preview-title">
                 <div className="section-heading">
                   <span className="step-number quiet">2</span>
-                  <div><h2 id="preview-title">页面预览</h2><p>{thumbnails.length < source.pageCount ? `正在准备 ${thumbnails.length}/${source.pageCount}` : `${source.pageCount} 页已就绪`}</p></div>
+                  <div><h2 id="preview-title">页面预览</h2><p>{thumbnails.length < source.pageCount ? `正在准备 ${thumbnails.length}/${source.pageCount}` : `点击页面可全屏查看 · ${source.pageCount} 页`}</p></div>
                 </div>
                 <div className="thumbnail-grid">
                   {thumbnails.map((thumbnail) => (
-                    <figure className="thumbnail" key={thumbnail.pageNumber}>
+                    <button
+                      className="thumbnail"
+                      key={thumbnail.pageNumber}
+                      type="button"
+                      onClick={() => setPreviewPage(thumbnail.pageNumber)}
+                      aria-label={`全屏查看第 ${thumbnail.pageNumber} 页`}
+                    >
                       <img src={thumbnail.url} alt={`第 ${thumbnail.pageNumber} 页预览`} />
-                      <figcaption>{thumbnail.pageNumber}</figcaption>
-                    </figure>
+                      <span className="thumbnail-page">{thumbnail.pageNumber}</span>
+                      <span className="thumbnail-expand" aria-hidden="true"><Maximize2 size={15} /></span>
+                    </button>
                   ))}
                   {thumbnails.length < source.pageCount && (
                     <div className="thumbnail-skeleton" aria-label="正在生成预览"><RefreshCw className="spin" size={20} /></div>
@@ -465,7 +619,91 @@ function App() {
         )}
       </main>
 
-      <footer><ShieldCheck size={14} /> 文件只在当前设备中处理，关闭页面后不会保留</footer>
+      <footer><ShieldCheck size={14} /> PDF 不会上传或保留；仅操作记录保存在当前设备</footer>
+
+      {showHistory && (
+        <div className="drawer-backdrop" role="presentation" onMouseDown={() => setShowHistory(false)}>
+          <aside className="history-drawer" role="dialog" aria-modal="true" aria-labelledby="history-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="drawer-header">
+              <div>
+                <p className="drawer-kicker"><CalendarClock size={15} /> 当前设备</p>
+                <h2 id="history-title">历史记录</h2>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setShowHistory(false)} aria-label="关闭历史记录"><X size={19} /></button>
+            </div>
+            <div className="history-privacy"><LockKeyhole size={16} /><span>这里只保存操作信息，不保存原始或输出 PDF。</span></div>
+            <div className="history-list">
+              {historyEntries.length === 0 ? (
+                <div className="history-empty">
+                  <span><HistoryIcon size={24} /></span>
+                  <strong>还没有历史记录</strong>
+                  <p>成功完成一次分割后，记录会保存在这台设备。</p>
+                </div>
+              ) : historyEntries.map((entry) => (
+                <article className={`history-entry mode-${entry.mode}`} key={entry.id}>
+                  <span className="history-accent" aria-hidden="true" />
+                  <div className="history-entry-main">
+                    <div className="history-entry-title">
+                      <strong title={entry.sourceName}>{entry.sourceName}</strong>
+                      <time dateTime={entry.createdAt}>{dateFormatter.format(new Date(entry.createdAt))}</time>
+                    </div>
+                    <p>{entry.modeSummary}</p>
+                    <div className="history-meta">
+                      <span>{entry.pageCount} 页</span>
+                      <span>{entry.outputCount} 份</span>
+                      <span>{formatFileSize(entry.outputBytes)}</span>
+                    </div>
+                  </div>
+                  <button
+                    className="icon-button history-delete"
+                    type="button"
+                    onClick={() => setHistoryEntries(removeHistory(entry.id))}
+                    aria-label={`删除 ${entry.sourceName} 的记录`}
+                    title="删除记录"
+                  ><Trash2 size={16} /></button>
+                </article>
+              ))}
+            </div>
+            {historyEntries.length > 0 && (
+              <div className="drawer-footer">
+                {confirmClearHistory ? (
+                  <div className="clear-confirm">
+                    <span>确定清空全部记录？</span>
+                    <button type="button" onClick={handleClearHistory}>清空</button>
+                    <button type="button" onClick={() => setConfirmClearHistory(false)}>取消</button>
+                  </div>
+                ) : (
+                  <button className="clear-history-button" type="button" onClick={() => setConfirmClearHistory(true)}><Trash2 size={16} /> 清空全部记录</button>
+                )}
+                <small>自动保留最近 30 天，最多 20 条</small>
+              </div>
+            )}
+          </aside>
+        </div>
+      )}
+
+      {previewPage !== null && source && (
+        <div
+          className="preview-backdrop"
+          role="presentation"
+          onMouseDown={closePagePreview}
+          onTouchStart={(event) => { touchStartXRef.current = event.changedTouches[0]?.clientX ?? null }}
+          onTouchEnd={(event) => handlePreviewTouchEnd(event.changedTouches[0]?.clientX ?? 0)}
+        >
+          <div className="page-preview-dialog" role="dialog" aria-modal="true" aria-label={`第 ${previewPage} 页高清预览`} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="preview-toolbar">
+              <span>{previewPage} / {source.pageCount}</span>
+              <button type="button" onClick={closePagePreview} aria-label="关闭高清预览" title="关闭"><X size={20} /></button>
+            </div>
+            <div className="preview-stage">
+              {previewLoading && <div className="preview-loading"><RefreshCw className="spin" size={24} /><span>正在生成高清预览</span></div>}
+              {previewImage && <img src={previewImage} alt={`第 ${previewPage} 页高清预览`} />}
+            </div>
+            <button className="preview-nav previous" type="button" onClick={() => movePreview(-1)} disabled={previewPage === 1} aria-label="上一页"><ChevronLeft size={24} /></button>
+            <button className="preview-nav next" type="button" onClick={() => movePreview(1)} disabled={previewPage === source.pageCount} aria-label="下一页"><ChevronRight size={24} /></button>
+          </div>
+        </div>
+      )}
 
       {needRefresh && (
         <div className="update-toast" role="status">
