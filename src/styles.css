@@ -27,6 +27,30 @@
   --animate-preview-enter: preview-enter 200ms ease-out both;
   --animate-preview-image-enter: preview-image-enter 180ms ease-out both;
   --animate-group-refresh: group-refresh 200ms ease-out both;
+  --animate-mesh-drift: mesh-drift 18s ease-in-out infinite alternate;
+  --animate-neon-flow: neon-flow 2.4s linear infinite;
+  --animate-success-pop: success-pop 620ms cubic-bezier(.2,.9,.3,1.25) both;
+  --animate-success-morph: success-morph 700ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+@utility mesh-background {
+  background-color: #eef4f8;
+  background-image:
+    radial-gradient(ellipse 85% 70% at 12% 8%, rgba(165, 243, 252, .68) 0%, rgba(165, 243, 252, 0) 64%),
+    radial-gradient(ellipse 72% 76% at 88% 14%, rgba(221, 214, 254, .62) 0%, rgba(221, 214, 254, 0) 66%),
+    radial-gradient(ellipse 94% 72% at 55% 98%, rgba(191, 219, 254, .62) 0%, rgba(191, 219, 254, 0) 68%),
+    linear-gradient(145deg, #f8fbff 0%, #eff8fb 44%, #f7f5ff 100%);
+  background-attachment: fixed;
+  background-size: 120% 120%, 118% 118%, 126% 126%, 100% 100%;
+  animation: mesh-drift 18s ease-in-out infinite alternate;
+}
+
+@utility drag-neon {
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.8),
+    0 0 26px rgba(34,211,238,.24),
+    0 0 46px rgba(139,92,246,.18),
+    0 24px 70px rgba(37,99,235,.13);
 }
 
 @layer base {
@@ -59,6 +83,20 @@
 @keyframes preview-enter { from { opacity: 0; transform: scale(.985); } }
 @keyframes preview-image-enter { from { opacity: 0; transform: scale(.99); } }
 @keyframes group-refresh { from { opacity: 0; transform: translateY(5px); } }
+@keyframes mesh-drift {
+  0% { background-position: 0% 0%, 100% 0%, 50% 100%, 0 0; }
+  100% { background-position: 8% 7%, 92% 8%, 46% 92%, 0 0; }
+}
+@keyframes neon-flow { to { transform: rotate(360deg); } }
+@keyframes success-pop {
+  0% { opacity: 0; transform: translateY(-8px) scale(.72); }
+  58% { opacity: 1; transform: translateY(2px) scale(1.08); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes success-morph {
+  0% { opacity: 0; transform: translateY(14px) scale(1.015); border-radius: 28px; }
+  100% { opacity: 1; transform: translateY(0) scale(1); border-radius: 8px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
