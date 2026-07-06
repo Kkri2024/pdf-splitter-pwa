@@ -1,19 +1,21 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   base: './',
   plugins: [
     react(),
+    tailwindcss(),
     VitePWA({
       registerType: 'prompt',
       manifest: {
         name: 'PDF 分割工具',
         short_name: 'PDF 分割',
         description: '在设备本地快速分割 PDF 文件',
-        theme_color: '#f4f5f7',
-        background_color: '#f4f5f7',
+        theme_color: '#eef2f6',
+        background_color: '#eef2f6',
         display: 'standalone',
         orientation: 'any',
         lang: 'zh-CN',

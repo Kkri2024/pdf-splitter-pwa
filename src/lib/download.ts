@@ -1,6 +1,8 @@
 import JSZip from 'jszip'
 import type { SplitOutput } from './pdfSplitter'
 
+export type CopyPdfResult = 'copied-file' | 'copied-name' | 'failed'
+
 export function createPdfBlob(bytes: Uint8Array): Blob {
   return new Blob([bytes], { type: 'application/pdf' })
 }
@@ -34,6 +36,33 @@ export async function shareOrDownloadPdf(output: SplitOutput): Promise<'shared' 
 
   triggerDownload(blob, output.name)
   return 'downloaded'
+}
+
+export async function copyPdfToClipboard(
+  output: SplitOutput,
+  clipboard: Clipboard | undefined = typeof navigator === 'undefined' ? undefined : navigator.clipboard,
+  ClipboardItemType: typeof ClipboardItem | undefined = globalThis.ClipboardItem,
+): Promise<CopyPdfResult> {
+  if (clipboard?.write && ClipboardItemType) {
+    try {
+      const blob = createPdfBlob(output.bytes)
+      await clipboard.write([new ClipboardItemType({ 'application/pdf': blob })])
+      return 'copied-file'
+    } catch {
+      // Safari and some Chromium builds reject application/pdf clipboard items.
+    }
+  }
+
+  if (clipboard?.writeText) {
+    try {
+      await clipboard.writeText(output.name)
+      return 'copied-name'
+    } catch {
+      // Fall through to a visible failure message in the UI.
+    }
+  }
+
+  return 'failed'
 }
 
 export async function createZip(
