@@ -1,4 +1,5 @@
 import { PDFDocument } from 'pdf-lib'
+import type { EditablePage } from './pageEditor'
 
 export type SplitMode = 'fixed' | 'each' | 'custom'
 
@@ -17,6 +18,7 @@ export interface SplitOutput {
   bytes: Uint8Array
   range: PageRange
   pageCount: number
+  pages?: EditablePage[]
 }
 
 export class PdfSplitError extends Error {

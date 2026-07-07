@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import {
   Archive,
   CalendarClock,
@@ -9,6 +9,7 @@ import {
   Download,
   Eye,
   FileCheck2,
+  FileOutput,
   FileText,
   History as HistoryIcon,
   Info,
@@ -16,10 +17,14 @@ import {
   Maximize2,
   PackageOpen,
   RefreshCw,
+  Redo2,
+  RotateCcw,
+  RotateCw,
   Scissors,
   Share2,
   ShieldCheck,
   Trash2,
+  Undo2,
   Upload,
   Wifi,
   WifiOff,
@@ -27,6 +32,7 @@ import {
 } from 'lucide-react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
+import { PageEditorGrid } from './components/PageEditorGrid'
 import { copyPdfToClipboard, createZip, downloadPdf, sharePdf, triggerDownload } from './lib/download'
 import { formatFileSize } from './lib/format'
 import {
@@ -39,19 +45,29 @@ import {
 import {
   loadPdfForPreview,
   renderPagePreview,
-  renderThumbnails,
+  renderThumbnail,
   type Thumbnail,
 } from './lib/pdfPreview'
 import {
-  createSplitPlan,
   getPdfBaseName,
   PdfSplitError,
-  splitPdf,
-  type PageRange,
+  parseRangeSpec,
   type SplitMode,
   type SplitOutput,
 } from './lib/pdfSplitter'
-import { createPreviewGroups, getAdjacentPreviewPage, isRemainderOutput } from './lib/uiLogic'
+import {
+  createEditedExportJob,
+  createOutputJobs,
+  createPageEditState,
+  pageEditReducer,
+  rangesToSelectedIds,
+  selectedIdsToRangeSpec,
+  type EditablePage,
+  type SelectionOutputMode,
+} from './lib/pageEditor'
+import { processPdfJobsInWorker } from './lib/pdfWorkerClient'
+import { getThumbnailConcurrency, trimThumbnailUrls } from './lib/thumbnailCache'
+import { isRemainderOutput } from './lib/uiLogic'
 
 interface SourcePdf {
   file: File
@@ -62,8 +78,8 @@ interface SourcePdf {
 type BusyState = 'idle' | 'loading' | 'splitting' | 'zipping'
 
 interface PreviewContext {
-  page: number
-  range: PageRange
+  pages: EditablePage[]
+  index: number
   label: string
 }
 
@@ -109,10 +125,12 @@ function getErrorMessage(error: unknown): string {
 
 function App() {
   const [source, setSource] = useState<SourcePdf | null>(null)
-  const [thumbnails, setThumbnails] = useState<Thumbnail[]>([])
+  const [thumbnails, setThumbnails] = useState<Record<string, Thumbnail>>({})
+  const [editState, dispatchEdit] = useReducer(pageEditReducer, 0, createPageEditState)
   const [mode, setMode] = useState<SplitMode>('fixed')
   const [pagesPerFile, setPagesPerFile] = useState('5')
   const [rangeSpec, setRangeSpec] = useState('')
+  const [selectionOutputMode, setSelectionOutputMode] = useState<SelectionOutputMode>('segments')
   const [outputs, setOutputs] = useState<SplitOutput[]>([])
   const [busy, setBusy] = useState<BusyState>('idle')
   const [progress, setProgress] = useState({ current: 0, total: 0 })
@@ -132,19 +150,24 @@ function App() {
   const inputRef = useRef<HTMLInputElement>(null)
   const generationRef = useRef(0)
   const previewDocumentRef = useRef<PDFDocumentProxy | null>(null)
-  const thumbnailUrlsRef = useRef<string[]>([])
+  const thumbnailUrlsRef = useRef<Map<string, string>>(new Map())
+  const thumbnailKeysRef = useRef<Map<string, string>>(new Map())
+  const thumbnailRequestedKeysRef = useRef<Map<string, string>>(new Map())
+  const thumbnailQueueRef = useRef<EditablePage[]>([])
+  const thumbnailActiveRef = useRef(0)
   const pagePreviewUrlRef = useRef('')
   const pagePreviewGenerationRef = useRef(0)
   const touchStartXRef = useRef<number | null>(null)
   const resultsRef = useRef<HTMLElement>(null)
   const pendingResultScrollRef = useRef(false)
+  const processingCancelRef = useRef<(() => void) | null>(null)
 
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW()
 
-  const previewPage = previewContext?.page ?? null
+  const previewPage = previewContext?.pages[previewContext.index] ?? null
 
   const closePagePreview = useCallback(() => {
     pagePreviewGenerationRef.current += 1
@@ -157,9 +180,14 @@ function App() {
 
   const cleanupPreview = useCallback(() => {
     generationRef.current += 1
+    processingCancelRef.current?.()
+    processingCancelRef.current = null
+    thumbnailQueueRef.current = []
     thumbnailUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
-    thumbnailUrlsRef.current = []
-    setThumbnails([])
+    thumbnailUrlsRef.current.clear()
+    thumbnailKeysRef.current.clear()
+    thumbnailRequestedKeysRef.current.clear()
+    setThumbnails({})
     if (previewDocumentRef.current) void previewDocumentRef.current.destroy()
     previewDocumentRef.current = null
     closePagePreview()
@@ -173,6 +201,7 @@ function App() {
     setBusy('idle')
     setProgress({ current: 0, total: 0 })
     setZipProgress(0)
+    dispatchEdit({ type: 'initialize', pageCount: 0 })
     if (inputRef.current) inputRef.current.value = ''
   }, [cleanupPreview])
 
@@ -195,13 +224,14 @@ function App() {
 
   useEffect(() => () => {
     generationRef.current += 1
+    processingCancelRef.current?.()
     thumbnailUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
     if (pagePreviewUrlRef.current) URL.revokeObjectURL(pagePreviewUrlRef.current)
     if (previewDocumentRef.current) void previewDocumentRef.current.destroy()
   }, [])
 
   useEffect(() => {
-    if (previewPage === null || !previewDocumentRef.current) return
+    if (!previewPage || !previewDocumentRef.current) return
     const previewGeneration = pagePreviewGenerationRef.current + 1
     pagePreviewGenerationRef.current = previewGeneration
     if (pagePreviewUrlRef.current) URL.revokeObjectURL(pagePreviewUrlRef.current)
@@ -212,9 +242,10 @@ function App() {
     const targetWidth = Math.min(window.innerWidth - 48, 1120)
     void renderPagePreview(
       previewDocumentRef.current,
-      previewPage,
+      previewPage.sourcePageIndex + 1,
       targetWidth,
       () => previewGeneration !== pagePreviewGenerationRef.current,
+      previewPage.rotation,
     ).then((preview) => {
       if (!preview || previewGeneration !== pagePreviewGenerationRef.current) {
         if (preview?.url) URL.revokeObjectURL(preview.url)
@@ -232,7 +263,7 @@ function App() {
   }, [previewPage])
 
   useEffect(() => {
-    const dialogOpen = showHistory || previewPage !== null || showInstallHelp
+    const dialogOpen = showHistory || Boolean(previewPage) || showInstallHelp
     if (!dialogOpen) return
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -256,23 +287,23 @@ function App() {
   }, [outputs])
 
   useEffect(() => {
-    if (!showHistory && previewPage === null) return
+    if (!showHistory && !previewPage) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (previewPage !== null) closePagePreview()
+        if (previewPage) closePagePreview()
         else setShowHistory(false)
       }
       if (previewContext) {
         if (event.key === 'ArrowLeft') {
           setPreviewContext((current) => current && ({
             ...current,
-            page: getAdjacentPreviewPage(current.page, -1, current.range),
+            index: Math.max(0, current.index - 1),
           }))
         }
         if (event.key === 'ArrowRight') {
           setPreviewContext((current) => current && ({
             ...current,
-            page: getAdjacentPreviewPage(current.page, 1, current.range),
+            index: Math.min(current.pages.length - 1, current.index + 1),
           }))
         }
       }
@@ -280,6 +311,71 @@ function App() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [closePagePreview, previewContext, previewPage, showHistory])
+
+  const runThumbnailQueue = useCallback(() => {
+    const document = previewDocumentRef.current
+    if (!document) return
+    const limit = getThumbnailConcurrency(window.matchMedia('(pointer: coarse)').matches)
+    while (thumbnailActiveRef.current < limit && thumbnailQueueRef.current.length > 0) {
+      const page = thumbnailQueueRef.current.shift()!
+      const key = `${page.sourcePageIndex}:${page.rotation}`
+      if (thumbnailKeysRef.current.get(page.id) === key) continue
+      thumbnailActiveRef.current += 1
+      const generation = generationRef.current
+      void renderThumbnail(
+        document,
+        page.sourcePageIndex + 1,
+        page.rotation,
+        limit === 1 ? 1.5 : 2,
+        () => generation !== generationRef.current,
+      ).then((thumbnail) => {
+        if (!thumbnail || generation !== generationRef.current) {
+          if (thumbnail?.url) URL.revokeObjectURL(thumbnail.url)
+          return
+        }
+        if (thumbnailRequestedKeysRef.current.get(page.id) !== key) {
+          URL.revokeObjectURL(thumbnail.url)
+          return
+        }
+        const previousUrl = thumbnailUrlsRef.current.get(page.id)
+        if (previousUrl) URL.revokeObjectURL(previousUrl)
+        thumbnailUrlsRef.current.delete(page.id)
+        thumbnailUrlsRef.current.set(page.id, thumbnail.url)
+        thumbnailKeysRef.current.set(page.id, key)
+        setThumbnails((current) => ({ ...current, [page.id]: thumbnail }))
+
+        trimThumbnailUrls(thumbnailUrlsRef.current).forEach(([oldestId, oldestUrl]) => {
+          URL.revokeObjectURL(oldestUrl)
+          thumbnailKeysRef.current.delete(oldestId)
+          thumbnailRequestedKeysRef.current.delete(oldestId)
+          setThumbnails((current) => {
+            const next = { ...current }
+            delete next[oldestId]
+            return next
+          })
+        })
+      }).catch((thumbnailError) => setError(getErrorMessage(thumbnailError))).finally(() => {
+        thumbnailActiveRef.current -= 1
+        runThumbnailQueue()
+      })
+    }
+  }, [])
+
+  const requestThumbnail = useCallback((page: EditablePage) => {
+    const key = `${page.sourcePageIndex}:${page.rotation}`
+    if (thumbnailKeysRef.current.get(page.id) === key) {
+      const url = thumbnailUrlsRef.current.get(page.id)
+      if (url) {
+        thumbnailUrlsRef.current.delete(page.id)
+        thumbnailUrlsRef.current.set(page.id, url)
+      }
+      return
+    }
+    if (thumbnailQueueRef.current.some((queued) => queued.id === page.id && queued.rotation === page.rotation)) return
+    thumbnailRequestedKeysRef.current.set(page.id, key)
+    thumbnailQueueRef.current.push(page)
+    runThumbnailQueue()
+  }, [runThumbnailQueue])
 
   const processFile = useCallback(async (file?: File) => {
     if (!file || busy !== 'idle') return
@@ -311,21 +407,11 @@ function App() {
 
       previewDocumentRef.current = loaded.document
       setSource({ file, bytes, pageCount: loaded.pageCount })
-      setRangeSpec(`1-${Math.min(loaded.pageCount, 3)}`)
+      const initialEnd = Math.min(loaded.pageCount, 3)
+      setRangeSpec(`1-${initialEnd}`)
+      dispatchEdit({ type: 'initialize', pageCount: loaded.pageCount })
+      dispatchEdit({ type: 'set-selection', ids: Array.from({ length: initialEnd }, (_, index) => `page-${index + 1}`) })
       setBusy('idle')
-
-      await renderThumbnails(
-        loaded.document,
-        (thumbnail) => {
-          if (generation === generationRef.current) {
-            thumbnailUrlsRef.current.push(thumbnail.url)
-            setThumbnails((current) => [...current, thumbnail])
-          } else {
-            URL.revokeObjectURL(thumbnail.url)
-          }
-        },
-        () => generation !== generationRef.current,
-      )
     } catch (loadError) {
       if (generation === generationRef.current) {
         cleanupPreview()
@@ -340,28 +426,19 @@ function App() {
     if (!source) return { plan: [], error: '' }
     try {
       return {
-        plan: createSplitPlan(mode, source.pageCount, {
+        plan: createOutputJobs(mode, editState.present.pages, source.file.name, {
           pagesPerFile: Number(pagesPerFile),
           rangeSpec,
+          selectionOutputMode,
         }),
         error: '',
       }
     } catch (planError) {
       return { plan: [], error: getErrorMessage(planError) }
     }
-  }, [mode, pagesPerFile, rangeSpec, source])
+  }, [editState.present.pages, mode, pagesPerFile, rangeSpec, selectionOutputMode, source])
 
   const chunkSize = Number(pagesPerFile)
-  const previewGroups = useMemo(
-    () => createPreviewGroups(
-      thumbnails,
-      source?.pageCount ?? 0,
-      mode,
-      chunkSize,
-      planResult.error ? [] : planResult.plan,
-    ),
-    [chunkSize, mode, planResult.error, planResult.plan, source?.pageCount, thumbnails],
-  )
 
   const handleSplit = async () => {
     if (!source || planResult.error || busy !== 'idle') return
@@ -371,12 +448,11 @@ function App() {
     setProgress({ current: 0, total: planResult.plan.length })
 
     try {
-      const result = await splitPdf(
-        source.bytes.slice(),
-        source.file.name,
-        planResult.plan,
-        (current, total) => setProgress({ current, total }),
-      )
+      closePagePreview()
+      const task = processPdfJobsInWorker(source.bytes, planResult.plan, (current, total) => setProgress({ current, total }))
+      processingCancelRef.current = task.cancel
+      const result = await task.promise
+      processingCancelRef.current = null
       pendingResultScrollRef.current = true
       setOutputs(result)
       const modeSummary = mode === 'fixed'
@@ -387,7 +463,7 @@ function App() {
       setHistoryEntries(appendHistory({
         sourceName: source.file.name,
         sourceSize: source.file.size,
-        pageCount: source.pageCount,
+        pageCount: editState.present.pages.length,
         mode,
         modeSummary,
         outputCount: result.length,
@@ -397,7 +473,30 @@ function App() {
       setOutputs([])
       setError(getErrorMessage(splitError))
     } finally {
+      processingCancelRef.current = null
       setBusy('idle')
+    }
+  }
+
+  const handleExportEdited = async () => {
+    if (!source || busy !== 'idle' || editState.present.pages.length === 0) return
+    setBusy('splitting')
+    setProgress({ current: 0, total: 1 })
+    setError('')
+    closePagePreview()
+    try {
+      const task = processPdfJobsInWorker(source.bytes, [createEditedExportJob(editState.present.pages, source.file.name)], (current, total) => setProgress({ current, total }))
+      processingCancelRef.current = task.cancel
+      const [output] = await task.promise
+      processingCancelRef.current = null
+      downloadPdf(output)
+      setCopyNotice('编辑后的完整 PDF 已生成')
+    } catch (exportError) {
+      setError(getErrorMessage(exportError))
+    } finally {
+      processingCancelRef.current = null
+      setBusy('idle')
+      setProgress({ current: 0, total: 0 })
     }
   }
 
@@ -406,6 +505,7 @@ function App() {
     setBusy('zipping')
     setZipProgress(0)
     setError('')
+    closePagePreview()
     try {
       const zip = await createZip(outputs, setZipProgress)
       triggerDownload(zip, `${getPdfBaseName(source.file.name)}_split.zip`)
@@ -445,15 +545,74 @@ function App() {
   }
 
   const openOutputPreview = (output: SplitOutput) => {
-    setPreviewContext({ page: output.range.start, range: output.range, label: output.name })
+    const pages = output.pages ?? editState.present.pages.slice(output.range.start - 1, output.range.end)
+    setPreviewContext({ pages, index: 0, label: output.name })
   }
 
   const movePreview = (direction: -1 | 1) => {
     setPreviewContext((current) => current && ({
       ...current,
-      page: getAdjacentPreviewPage(current.page, direction, current.range),
+      index: Math.max(0, Math.min(current.pages.length - 1, current.index + direction)),
     }))
   }
+
+  const handleTogglePage = (id: string) => {
+    const selected = new Set(editState.present.selectedIds)
+    if (selected.has(id)) selected.delete(id)
+    else selected.add(id)
+    const ids = editState.present.pages.filter((page) => selected.has(page.id)).map((page) => page.id)
+    dispatchEdit({ type: 'set-selection', ids })
+    if (mode === 'custom') setRangeSpec(selectedIdsToRangeSpec(ids, editState.present.pages))
+    setOutputs([])
+  }
+
+  const handleToggleAllPages = () => {
+    const ids = editState.present.selectedIds.length === editState.present.pages.length
+      ? []
+      : editState.present.pages.map((page) => page.id)
+    dispatchEdit({ type: 'set-selection', ids })
+    if (mode === 'custom') setRangeSpec(selectedIdsToRangeSpec(ids, editState.present.pages))
+    setOutputs([])
+  }
+
+  const handleRangeChange = (value: string) => {
+    setRangeSpec(value)
+    setOutputs([])
+    try {
+      const ranges = parseRangeSpec(value, editState.present.pages.length)
+      dispatchEdit({ type: 'set-selection', ids: rangesToSelectedIds(ranges, editState.present.pages) })
+    } catch {
+      // Preserve the last valid visual selection while the user edits an incomplete range.
+    }
+  }
+
+  const applyPageEdit = (action: Parameters<typeof dispatchEdit>[0]) => {
+    if (action.type === 'delete-selected' && editState.present.selectedIds.length >= editState.present.pages.length) {
+      setCopyNotice('PDF 至少需要保留一页')
+      return
+    }
+    if (action.type === 'delete-selected') {
+      editState.present.selectedIds.forEach((id) => {
+        const url = thumbnailUrlsRef.current.get(id)
+        if (url) URL.revokeObjectURL(url)
+        thumbnailUrlsRef.current.delete(id)
+        thumbnailKeysRef.current.delete(id)
+        thumbnailRequestedKeysRef.current.delete(id)
+      })
+      setThumbnails((current) => {
+        const next = { ...current }
+        editState.present.selectedIds.forEach((id) => delete next[id])
+        return next
+      })
+    }
+    dispatchEdit(action)
+    setOutputs([])
+  }
+
+  useEffect(() => {
+    if (mode !== 'custom') return
+    setRangeSpec(selectedIdsToRangeSpec(editState.present.selectedIds, editState.present.pages))
+  }, [editState.present.pages, mode])
 
   const handlePreviewTouchEnd = (clientX: number) => {
     if (touchStartXRef.current === null) return
@@ -574,12 +733,17 @@ function App() {
               <span className="grid size-[42px] shrink-0 place-items-center rounded-lg bg-brand-soft text-brand" aria-hidden="true"><FileCheck2 size={23} /></span>
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <strong className="truncate text-sm" title={source.file.name}>{source.file.name}</strong>
-                <span className="text-xs text-muted">{source.pageCount} 页 · {formatFileSize(source.file.size)}</span>
+                <span className="text-xs text-muted">当前 {editState.present.pages.length} 页{editState.present.pages.length !== source.pageCount ? ` · 原 ${source.pageCount} 页` : ''} · {formatFileSize(source.file.size)}</span>
               </div>
               <button className={ui.iconButton} type="button" onClick={clearAll} disabled={isBusy} aria-label="移除文件" title="移除文件">
                 <Trash2 size={18} />
               </button>
             </section>
+            {(source.pageCount > 500 || source.file.size > 100 * 1024 * 1024) && (
+              <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-50/75 px-3 py-2.5 text-xs leading-relaxed text-amber-800">
+                <Info className="mt-px shrink-0" size={16} /> 文件较大，缩略图会按当前可见页面生成；处理时建议关闭其他占用内存的应用。
+              </div>
+            )}
 
             <div className="mt-6 grid grid-cols-[minmax(320px,.78fr)_minmax(0,1.22fr)] items-start gap-6 max-[900px]:grid-cols-1">
               <section className={cx(ui.glassPanel, 'animate-surface-enter p-6 max-[540px]:p-4.5')} aria-labelledby="split-settings-title">
@@ -596,7 +760,12 @@ function App() {
                       role="tab"
                       aria-selected={mode === option.value}
                       className={cx('h-[38px] min-w-0 cursor-pointer rounded-md border-0 bg-transparent px-2 text-[13px] font-semibold whitespace-nowrap text-muted transition-all duration-200 max-[540px]:text-xs', mode === option.value && 'bg-white text-ink shadow-[0_2px_8px_rgba(29,36,47,.12)]')}
-                      onClick={() => { setMode(option.value); setOutputs([]); setError('') }}
+                      onClick={() => {
+                        setMode(option.value)
+                        setOutputs([])
+                        setError('')
+                        if (option.value === 'custom') setRangeSpec(selectedIdsToRangeSpec(editState.present.selectedIds, editState.present.pages))
+                      }}
                       disabled={isBusy}
                     >
                       {option.label}
@@ -613,7 +782,7 @@ function App() {
                           className="h-11 w-[98px] rounded-lg border border-black/20 bg-white/90 px-3 text-base font-semibold text-ink transition-shadow focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand/15"
                           type="number"
                           min="1"
-                          max={source.pageCount}
+                          max={editState.present.pages.length}
                           inputMode="numeric"
                           value={pagesPerFile}
                           onChange={(event) => { setPagesPerFile(event.target.value); setOutputs([]) }}
@@ -626,7 +795,7 @@ function App() {
                   {mode === 'each' && (
                     <div className="flex min-h-[70px] items-center gap-3">
                       <span className="grid size-[34px] place-items-center rounded-lg bg-success-soft text-success"><Check size={18} /></span>
-                      <div><strong className="text-sm">每页生成一份 PDF</strong><p className="mt-1 text-xs text-muted">预计生成 {source.pageCount} 个文件</p></div>
+                      <div><strong className="text-sm">每页生成一份 PDF</strong><p className="mt-1 text-xs text-muted">预计生成 {editState.present.pages.length} 个文件</p></div>
                     </div>
                   )}
                   {mode === 'custom' && (
@@ -638,11 +807,15 @@ function App() {
                         inputMode="text"
                         value={rangeSpec}
                         placeholder="例如：1-3,5,8-10"
-                        onChange={(event) => { setRangeSpec(event.target.value); setOutputs([]) }}
+                        onChange={(event) => handleRangeChange(event.target.value)}
                         disabled={isBusy}
                         aria-describedby="range-help"
                       />
                       <small className="font-normal leading-relaxed text-muted" id="range-help">用逗号分隔，每个范围生成一份文件</small>
+                      <span className="grid grid-cols-2 gap-1 rounded-lg bg-slate-200/80 p-1" role="group" aria-label="自定义页面输出方式">
+                        <button type="button" className={cx('min-h-9 rounded-md px-2 text-xs font-semibold text-muted', selectionOutputMode === 'segments' && 'bg-white text-ink shadow-sm')} onClick={() => { setSelectionOutputMode('segments'); setOutputs([]) }}>连续段拆分</button>
+                        <button type="button" className={cx('min-h-9 rounded-md px-2 text-xs font-semibold text-muted', selectionOutputMode === 'merged' && 'bg-white text-ink shadow-sm')} onClick={() => { setSelectionOutputMode('merged'); setOutputs([]) }}>合并为一份</button>
+                      </span>
                     </label>
                   )}
                 </div>
@@ -658,6 +831,9 @@ function App() {
                   {busy === 'splitting' ? <RefreshCw className="animate-spin" size={18} /> : <Scissors size={18} />}
                   {splitButtonLabel}
                 </button>
+                <button className={cx(ui.secondaryButton, 'mt-2.5 w-full')} type="button" onClick={() => void handleExportEdited()} disabled={isBusy || editState.present.pages.length === 0}>
+                  <FileOutput size={18} /> 导出完整 PDF
+                </button>
                 {busy === 'splitting' && (
                   <div className="mt-3 h-1 overflow-hidden rounded-sm bg-slate-200" aria-label="分割进度">
                     <span className="block h-full bg-brand transition-[width] duration-200" style={{ width: `${progress.total ? (progress.current / progress.total) * 100 : 0}%` }} />
@@ -668,56 +844,33 @@ function App() {
               <section className={cx(ui.glassPanel, 'min-w-0 animate-surface-enter p-6 [animation-delay:40ms] max-[540px]:p-4.5')} aria-labelledby="preview-title">
                 <div className={ui.sectionHeading}>
                   <span className="grid size-[34px] shrink-0 place-items-center rounded-lg bg-coral-soft text-sm font-bold text-coral">2</span>
-                  <div><h2 className="mb-1 text-[17px] leading-tight font-semibold" id="preview-title">页面预览</h2><p className="text-xs leading-snug text-muted">{thumbnails.length < source.pageCount ? `正在准备 ${thumbnails.length}/${source.pageCount}` : `点击页面可全屏查看 · ${source.pageCount} 页`}</p></div>
+                  <div><h2 className="mb-1 text-[17px] leading-tight font-semibold" id="preview-title">页面编辑与预览</h2><p className="text-xs leading-snug text-muted">已选 {editState.present.selectedIds.length} 页 · 当前 {editState.present.pages.length} 页</p></div>
                 </div>
-                <div className="mt-6 h-[520px] overflow-y-auto px-1 pb-2 [scrollbar-color:rgba(92,102,117,.35)_transparent] [scrollbar-width:thin] max-[900px]:h-[560px] max-[540px]:h-[500px] max-[360px]:h-[540px]">
-                  <div key={`${mode}-${chunkSize}-${rangeSpec}`} className="space-y-4 animate-group-refresh">
-                    {previewGroups.map((group, groupIndex) => (
-                      <section
-                        className={cx('grid grid-cols-2 items-start gap-4 pb-4 max-[540px]:gap-3 max-[360px]:grid-cols-1', mode !== 'each' && groupIndex < previewGroups.length - 1 && 'border-b border-dashed border-brand/25')}
-                        key={`${groupIndex}-${group.range.start}-${group.range.end}`}
-                        aria-label={mode !== 'each' ? `第 ${groupIndex + 1} 份，${group.range.start} 到 ${group.range.end} 页` : undefined}
-                      >
-                        {mode !== 'each' && (mode === 'custom' || (Number.isInteger(chunkSize) && chunkSize > 0)) && (
-                          <div className="col-span-full flex items-center justify-between gap-3 text-xs text-muted max-[360px]:col-span-1">
-                            <span className="font-semibold text-brand">第 {groupIndex + 1} 份</span>
-                            <span>{group.range.start}-{group.range.end} 页</span>
-                          </div>
-                        )}
-                        {group.thumbnails.map((thumbnail) => (
-                          <button
-                            className={ui.thumbnail}
-                            key={thumbnail.pageNumber}
-                            type="button"
-                            onClick={() => setPreviewContext({
-                              page: thumbnail.pageNumber,
-                              range: mode === 'custom' ? group.range : { start: 1, end: source.pageCount },
-                              label: source.file.name,
-                            })}
-                            aria-label={`全屏查看第 ${thumbnail.pageNumber} 页`}
-                          >
-                            <img
-                              className="block h-auto w-full border border-black/10 bg-white object-contain"
-                              style={{ aspectRatio: `${thumbnail.width} / ${thumbnail.height}` }}
-                              src={thumbnail.url}
-                              alt={`第 ${thumbnail.pageNumber} 页预览`}
-                            />
-                            <span className="absolute right-2 bottom-2 grid min-w-7 place-items-center rounded-[5px] bg-ink/85 px-2 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm">{thumbnail.pageNumber}</span>
-                            <span className="absolute top-2 right-2 grid size-[30px] -translate-y-1 place-items-center rounded-md border border-black/10 bg-white/90 text-ink opacity-0 transition-all duration-200 group-hover/thumb:translate-y-0 group-hover/thumb:opacity-100 group-focus-visible/thumb:translate-y-0 group-focus-visible/thumb:opacity-100 max-[540px]:size-7 max-[540px]:translate-y-0 max-[540px]:opacity-100" aria-hidden="true"><Maximize2 size={15} /></span>
-                          </button>
-                        ))}
-                      </section>
-                    ))}
-                  </div>
-                  {mode === 'custom' && previewGroups.length === 0 && (
-                    <div className="grid min-h-40 place-items-center px-4 text-center text-sm leading-relaxed text-muted">
-                      输入有效页码范围后，这里只显示将要生成的页面
-                    </div>
-                  )}
-                  {thumbnails.length < source.pageCount && (
-                    <div className="mt-4 grid aspect-[.71] w-[calc(50%-8px)] place-items-center rounded-[5px] border border-black/10 bg-slate-100/80 text-faint max-[540px]:w-[calc(50%-6px)] max-[360px]:w-full" aria-label="正在生成预览"><RefreshCw className="animate-spin" size={20} /></div>
-                  )}
+                <div className="mt-4 flex flex-wrap items-center gap-1.5 rounded-lg border border-black/8 bg-white/45 p-2">
+                  <button className="min-h-10 rounded-md px-2.5 text-xs font-semibold text-brand hover:bg-brand-soft" type="button" onClick={handleToggleAllPages}>{editState.present.selectedIds.length === editState.present.pages.length ? '取消全选' : '全选'}</button>
+                  <span className="mx-1 h-6 w-px bg-black/10" aria-hidden="true" />
+                  <button className="grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'rotate', direction: -1 })} disabled={isBusy || editState.present.selectedIds.length === 0} aria-label="所选页面向左旋转" title="向左旋转"><RotateCcw size={18} /></button>
+                  <button className="grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'rotate', direction: 1 })} disabled={isBusy || editState.present.selectedIds.length === 0} aria-label="所选页面向右旋转" title="向右旋转"><RotateCw size={18} /></button>
+                  <button className="grid size-10 place-items-center rounded-md text-muted hover:bg-danger-soft hover:text-danger disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'delete-selected' })} disabled={isBusy || editState.present.selectedIds.length === 0} aria-label="删除所选页面" title="删除"><Trash2 size={18} /></button>
+                  <span className="mx-1 h-6 w-px bg-black/10" aria-hidden="true" />
+                  <button className="grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'undo' })} disabled={isBusy || editState.past.length === 0} aria-label="撤销页面编辑" title="撤销"><Undo2 size={18} /></button>
+                  <button className="grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'redo' })} disabled={isBusy || editState.future.length === 0} aria-label="重做页面编辑" title="重做"><Redo2 size={18} /></button>
+                  <button className="ml-auto min-h-10 rounded-md px-2.5 text-xs font-semibold text-muted hover:bg-white hover:text-brand" type="button" onClick={() => applyPageEdit({ type: 'restore' })} disabled={isBusy}>恢复原始</button>
                 </div>
+                <PageEditorGrid
+                  pages={editState.present.pages}
+                  selectedIds={editState.present.selectedIds}
+                  thumbnails={thumbnails}
+                  disabled={isBusy}
+                  onToggle={handleTogglePage}
+                  onMove={(activeId, overId) => applyPageEdit({ type: 'move', activeId, overId })}
+                  onMoveTo={(id, position) => applyPageEdit({ type: 'move-to', id, position })}
+                  onOpen={(id) => {
+                    const index = editState.present.pages.findIndex((page) => page.id === id)
+                    if (index >= 0) setPreviewContext({ pages: editState.present.pages, index, label: source.file.name })
+                  }}
+                  onRequestThumbnail={requestThumbnail}
+                />
               </section>
             </div>
           </>
@@ -835,7 +988,7 @@ function App() {
         </div>
       )}
 
-      {previewPage !== null && source && (
+      {previewPage && source && previewContext && (
         <div
           className="fixed inset-0 z-70 grid animate-fade-in place-items-center bg-[#0a0f16]/85 p-[max(18px,env(safe-area-inset-top))_max(18px,env(safe-area-inset-right))_max(18px,env(safe-area-inset-bottom))_max(18px,env(safe-area-inset-left))] backdrop-blur-[10px] max-[540px]:p-0"
           role="presentation"
@@ -843,20 +996,20 @@ function App() {
           onTouchStart={(event) => { touchStartXRef.current = event.changedTouches[0]?.clientX ?? null }}
           onTouchEnd={(event) => handlePreviewTouchEnd(event.changedTouches[0]?.clientX ?? 0)}
         >
-          <div className="relative flex h-full w-[min(1180px,100%)] animate-preview-enter flex-col overflow-hidden rounded-lg border border-white/10 bg-[#1a212b]/90 shadow-[0_30px_90px_rgba(0,0,0,.4)] max-[540px]:rounded-none max-[540px]:border-0" role="dialog" aria-modal="true" aria-label={`第 ${previewPage} 页高清预览`} onMouseDown={(event) => event.stopPropagation()}>
+          <div className="relative flex h-full w-[min(1180px,100%)] animate-preview-enter flex-col overflow-hidden rounded-lg border border-white/10 bg-[#1a212b]/90 shadow-[0_30px_90px_rgba(0,0,0,.4)] max-[540px]:rounded-none max-[540px]:border-0" role="dialog" aria-modal="true" aria-label={`当前第 ${previewContext.index + 1} 页高清预览`} onMouseDown={(event) => event.stopPropagation()}>
             <div className="flex min-h-[54px] items-center justify-between gap-4 border-b border-white/10 bg-[#10161e]/75 py-1.5 pr-2.5 pl-4.5 text-white">
               <span className="min-w-0 text-[13px] font-semibold">
                 <strong className="block truncate">{previewContext?.label}</strong>
-                <small className="font-normal text-white/65">{previewPage - (previewContext?.range.start ?? 1) + 1} / {(previewContext?.range.end ?? source.pageCount) - (previewContext?.range.start ?? 1) + 1} · 原第 {previewPage} 页</small>
+                <small className="font-normal text-white/65">{previewContext.index + 1} / {previewContext.pages.length} · 原第 {previewPage.sourcePageIndex + 1} 页{previewPage.rotation ? ` · 旋转 ${previewPage.rotation}°` : ''}</small>
               </span>
               <button className="grid size-10 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/10" type="button" onClick={closePagePreview} aria-label="关闭高清预览" title="关闭"><X size={20} /></button>
             </div>
             <div className="grid min-h-0 flex-1 place-items-center overflow-auto px-[72px] py-5 max-[540px]:p-3">
               {previewLoading && <div className="flex items-center gap-2.5 text-[13px] text-white/75"><RefreshCw className="animate-spin" size={24} /><span>正在生成高清预览</span></div>}
-              {previewImage && <img className="block max-h-full max-w-full animate-preview-image-enter bg-white shadow-[0_18px_46px_rgba(0,0,0,.34)] max-[540px]:max-h-[calc(100vh-118px)]" src={previewImage} alt={`第 ${previewPage} 页高清预览`} />}
+              {previewImage && <img className="block max-h-full max-w-full animate-preview-image-enter bg-white shadow-[0_18px_46px_rgba(0,0,0,.34)] max-[540px]:max-h-[calc(100vh-118px)]" src={previewImage} alt={`当前第 ${previewContext.index + 1} 页高清预览`} />}
             </div>
-            <button className="absolute top-1/2 left-3.5 z-2 grid size-[46px] -translate-y-1/2 place-items-center rounded-lg border border-white/10 bg-white/10 text-white transition-colors hover:bg-white/20 disabled:cursor-default disabled:opacity-20 max-[540px]:top-auto max-[540px]:bottom-[max(12px,env(safe-area-inset-bottom))] max-[540px]:left-[calc(50%-52px)] max-[540px]:size-[42px] max-[540px]:translate-y-0 max-[540px]:bg-[#10161e]/80" type="button" onClick={() => movePreview(-1)} disabled={previewPage === previewContext?.range.start} aria-label="上一页"><ChevronLeft size={24} /></button>
-            <button className="absolute top-1/2 right-3.5 z-2 grid size-[46px] -translate-y-1/2 place-items-center rounded-lg border border-white/10 bg-white/10 text-white transition-colors hover:bg-white/20 disabled:cursor-default disabled:opacity-20 max-[540px]:top-auto max-[540px]:right-[calc(50%-52px)] max-[540px]:bottom-[max(12px,env(safe-area-inset-bottom))] max-[540px]:size-[42px] max-[540px]:translate-y-0 max-[540px]:bg-[#10161e]/80" type="button" onClick={() => movePreview(1)} disabled={previewPage === previewContext?.range.end} aria-label="下一页"><ChevronRight size={24} /></button>
+            <button className="absolute top-1/2 left-3.5 z-2 grid size-[46px] -translate-y-1/2 place-items-center rounded-lg border border-white/10 bg-white/10 text-white transition-colors hover:bg-white/20 disabled:cursor-default disabled:opacity-20 max-[540px]:top-auto max-[540px]:bottom-[max(12px,env(safe-area-inset-bottom))] max-[540px]:left-[calc(50%-52px)] max-[540px]:size-[42px] max-[540px]:translate-y-0 max-[540px]:bg-[#10161e]/80" type="button" onClick={() => movePreview(-1)} disabled={previewContext.index === 0} aria-label="上一页"><ChevronLeft size={24} /></button>
+            <button className="absolute top-1/2 right-3.5 z-2 grid size-[46px] -translate-y-1/2 place-items-center rounded-lg border border-white/10 bg-white/10 text-white transition-colors hover:bg-white/20 disabled:cursor-default disabled:opacity-20 max-[540px]:top-auto max-[540px]:right-[calc(50%-52px)] max-[540px]:bottom-[max(12px,env(safe-area-inset-bottom))] max-[540px]:size-[42px] max-[540px]:translate-y-0 max-[540px]:bg-[#10161e]/80" type="button" onClick={() => movePreview(1)} disabled={previewContext.index === previewContext.pages.length - 1} aria-label="下一页"><ChevronRight size={24} /></button>
           </div>
         </div>
       )}
