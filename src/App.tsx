@@ -997,12 +997,29 @@ function App() {
           onTouchEnd={(event) => handlePreviewTouchEnd(event.changedTouches[0]?.clientX ?? 0)}
         >
           <div className="relative flex h-full w-[min(1180px,100%)] animate-preview-enter flex-col overflow-hidden rounded-lg border border-white/10 bg-[#1a212b]/90 shadow-[0_30px_90px_rgba(0,0,0,.4)] max-[540px]:rounded-none max-[540px]:border-0" role="dialog" aria-modal="true" aria-label={`当前第 ${previewContext.index + 1} 页高清预览`} onMouseDown={(event) => event.stopPropagation()}>
-            <div className="flex min-h-[54px] items-center justify-between gap-4 border-b border-white/10 bg-[#10161e]/75 py-1.5 pr-2.5 pl-4.5 text-white">
+            <div className="flex min-h-[62px] items-center justify-between gap-3 border-b border-white/10 bg-[#10161e]/75 py-2 pr-2.5 pl-4.5 text-white">
               <span className="min-w-0 text-[13px] font-semibold">
                 <strong className="block truncate">{previewContext?.label}</strong>
                 <small className="font-normal text-white/65">{previewContext.index + 1} / {previewContext.pages.length} · 原第 {previewPage.sourcePageIndex + 1} 页{previewPage.rotation ? ` · 旋转 ${previewPage.rotation}°` : ''}</small>
               </span>
-              <button className="grid size-10 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/10" type="button" onClick={closePagePreview} aria-label="关闭高清预览" title="关闭"><X size={20} /></button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  className={cx(
+                    'inline-flex min-h-11 items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition-colors',
+                    editState.present.selectedIds.includes(previewPage.id)
+                      ? 'border-brand bg-brand text-white'
+                      : 'border-white/15 bg-white/10 text-white hover:bg-white/20',
+                  )}
+                  type="button"
+                  onClick={() => handleTogglePage(previewPage.id)}
+                  aria-pressed={editState.present.selectedIds.includes(previewPage.id)}
+                >
+                  <Check size={17} />
+                  <span className="max-[390px]:hidden">{editState.present.selectedIds.includes(previewPage.id) ? '取消选中' : '选中本页'}</span>
+                  <span className="hidden max-[390px]:inline">{editState.present.selectedIds.includes(previewPage.id) ? '取消' : '选中'}</span>
+                </button>
+                <button className="grid size-11 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/10" type="button" onClick={closePagePreview} aria-label="关闭高清预览" title="关闭"><X size={20} /></button>
+              </div>
             </div>
             <div className="grid min-h-0 flex-1 place-items-center overflow-auto px-[72px] py-5 max-[540px]:p-3">
               {previewLoading && <div className="flex items-center gap-2.5 text-[13px] text-white/75"><RefreshCw className="animate-spin" size={24} /><span>正在生成高清预览</span></div>}
