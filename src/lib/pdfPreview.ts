@@ -11,12 +11,11 @@ export interface LoadedPdf {
 export interface Thumbnail {
   pageNumber: number
   url: string
-}
-
-export interface PagePreview extends Thumbnail {
   width: number
   height: number
 }
+
+export type PagePreview = Thumbnail
 
 export async function loadPdfForPreview(bytes: Uint8Array): Promise<LoadedPdf> {
   try {
@@ -65,7 +64,12 @@ export async function renderThumbnails(
     canvas.width = 0
     canvas.height = 0
     if (!blob || isCancelled()) return
-    onThumbnail({ pageNumber, url: URL.createObjectURL(blob) })
+    onThumbnail({
+      pageNumber,
+      url: URL.createObjectURL(blob),
+      width: baseViewport.width,
+      height: baseViewport.height,
+    })
   }
 }
 

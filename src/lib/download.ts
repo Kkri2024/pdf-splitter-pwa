@@ -2,6 +2,7 @@ import JSZip from 'jszip'
 import type { SplitOutput } from './pdfSplitter'
 
 export type CopyPdfResult = 'copied-file' | 'copied-name' | 'failed'
+export type SharePdfResult = 'shared' | 'cancelled' | 'unsupported' | 'failed'
 
 export function createPdfBlob(bytes: Uint8Array): Blob {
   return new Blob([bytes], { type: 'application/pdf' })
@@ -19,23 +20,25 @@ export function triggerDownload(blob: Blob, fileName: string): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
 }
 
-export async function shareOrDownloadPdf(output: SplitOutput): Promise<'shared' | 'downloaded' | 'cancelled'> {
+export function downloadPdf(output: SplitOutput): void {
+  triggerDownload(createPdfBlob(output.bytes), output.name)
+}
+
+export async function sharePdf(output: SplitOutput): Promise<SharePdfResult> {
   const blob = createPdfBlob(output.bytes)
   const file = new File([blob], output.name, { type: 'application/pdf' })
   const canShare = typeof navigator.share === 'function'
     && (typeof navigator.canShare !== 'function' || navigator.canShare({ files: [file] }))
 
-  if (canShare) {
-    try {
-      await navigator.share({ files: [file], title: output.name })
-      return 'shared'
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled'
-    }
-  }
+  if (!canShare) return 'unsupported'
 
-  triggerDownload(blob, output.name)
-  return 'downloaded'
+  try {
+    await navigator.share({ files: [file], title: output.name })
+    return 'shared'
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled'
+    return 'failed'
+  }
 }
 
 export async function copyPdfToClipboard(

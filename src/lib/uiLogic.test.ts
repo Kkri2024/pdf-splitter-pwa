@@ -5,6 +5,8 @@ import type { SplitOutput } from './pdfSplitter'
 const thumbnails = Array.from({ length: 12 }, (_, index) => ({
   pageNumber: index + 1,
   url: `blob:${index + 1}`,
+  width: 595,
+  height: 842,
 }))
 
 function output(pageCount: number): SplitOutput {
@@ -30,8 +32,30 @@ describe('preview grouping', () => {
 
   it('does not group other modes or invalid input', () => {
     expect(createPreviewGroups(thumbnails, 12, 'each', 1)).toHaveLength(1)
-    expect(createPreviewGroups(thumbnails, 12, 'custom', 5)).toHaveLength(1)
+    expect(createPreviewGroups(thumbnails, 12, 'custom', 5)).toHaveLength(0)
     expect(createPreviewGroups(thumbnails, 12, 'fixed', 0)).toHaveLength(1)
+  })
+
+  it('shows only custom ranges in their entered order', () => {
+    const plan = [
+      { start: 8, end: 10 },
+      { start: 1, end: 3 },
+      { start: 5, end: 5 },
+    ]
+    const groups = createPreviewGroups(thumbnails, 12, 'custom', 5, plan)
+
+    expect(groups.map((group) => group.range)).toEqual(plan)
+    expect(groups.map((group) => group.thumbnails.map((thumbnail) => thumbnail.pageNumber)))
+      .toEqual([[8, 9, 10], [1, 2, 3], [5]])
+  })
+
+  it('repeats overlapping custom pages in each output group', () => {
+    const groups = createPreviewGroups(thumbnails, 12, 'custom', 5, [
+      { start: 1, end: 3 },
+      { start: 3, end: 4 },
+    ])
+    expect(groups[0].thumbnails.map((thumbnail) => thumbnail.pageNumber)).toEqual([1, 2, 3])
+    expect(groups[1].thumbnails.map((thumbnail) => thumbnail.pageNumber)).toEqual([3, 4])
   })
 })
 

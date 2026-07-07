@@ -27,7 +27,7 @@ import {
 } from 'lucide-react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { copyPdfToClipboard, createZip, shareOrDownloadPdf, triggerDownload } from './lib/download'
+import { copyPdfToClipboard, createZip, downloadPdf, sharePdf, triggerDownload } from './lib/download'
 import { formatFileSize } from './lib/format'
 import {
   appendHistory,
@@ -136,6 +136,8 @@ function App() {
   const pagePreviewUrlRef = useRef('')
   const pagePreviewGenerationRef = useRef(0)
   const touchStartXRef = useRef<number | null>(null)
+  const resultsRef = useRef<HTMLElement>(null)
+  const pendingResultScrollRef = useRef(false)
 
   const {
     needRefresh: [needRefresh, setNeedRefresh],
@@ -244,6 +246,16 @@ function App() {
   }, [copyNotice])
 
   useEffect(() => {
+    if (outputs.length === 0 || !pendingResultScrollRef.current) return
+    pendingResultScrollRef.current = false
+    const frame = window.requestAnimationFrame(() => {
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      resultsRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [outputs])
+
+  useEffect(() => {
     if (!showHistory && previewPage === null) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -341,8 +353,14 @@ function App() {
 
   const chunkSize = Number(pagesPerFile)
   const previewGroups = useMemo(
-    () => createPreviewGroups(thumbnails, source?.pageCount ?? 0, mode, chunkSize),
-    [chunkSize, mode, source?.pageCount, thumbnails],
+    () => createPreviewGroups(
+      thumbnails,
+      source?.pageCount ?? 0,
+      mode,
+      chunkSize,
+      planResult.error ? [] : planResult.plan,
+    ),
+    [chunkSize, mode, planResult.error, planResult.plan, source?.pageCount, thumbnails],
   )
 
   const handleSplit = async () => {
@@ -359,6 +377,7 @@ function App() {
         planResult.plan,
         (current, total) => setProgress({ current, total }),
       )
+      pendingResultScrollRef.current = true
       setOutputs(result)
       const modeSummary = mode === 'fixed'
         ? `每 ${pagesPerFile} 页一份`
@@ -414,7 +433,15 @@ function App() {
       ? 'PDF 已复制到剪贴板'
       : result === 'copied-name'
         ? '浏览器不支持复制 PDF，已复制文件名'
-        : '无法访问剪贴板，请使用分享或保存')
+        : '无法访问剪贴板，请使用下载')
+  }
+
+  const handleShareOutput = async (output: SplitOutput) => {
+    const result = await sharePdf(output)
+    if (result === 'shared' || result === 'cancelled') return
+    setCopyNotice(result === 'unsupported'
+      ? '当前浏览器不支持文件分享，请使用下载'
+      : '分享失败，请使用下载后再分享')
   }
 
   const openOutputPreview = (output: SplitOutput) => {
@@ -644,14 +671,14 @@ function App() {
                   <div><h2 className="mb-1 text-[17px] leading-tight font-semibold" id="preview-title">页面预览</h2><p className="text-xs leading-snug text-muted">{thumbnails.length < source.pageCount ? `正在准备 ${thumbnails.length}/${source.pageCount}` : `点击页面可全屏查看 · ${source.pageCount} 页`}</p></div>
                 </div>
                 <div className="mt-6 h-[520px] overflow-y-auto px-1 pb-2 [scrollbar-color:rgba(92,102,117,.35)_transparent] [scrollbar-width:thin] max-[900px]:h-[560px] max-[540px]:h-[500px] max-[360px]:h-[540px]">
-                  <div key={`${mode}-${chunkSize}`} className="space-y-4 animate-group-refresh">
+                  <div key={`${mode}-${chunkSize}-${rangeSpec}`} className="space-y-4 animate-group-refresh">
                     {previewGroups.map((group, groupIndex) => (
                       <section
-                        className={cx('grid grid-cols-2 gap-4 pb-4 max-[540px]:gap-3 max-[360px]:grid-cols-1', mode === 'fixed' && groupIndex < previewGroups.length - 1 && 'border-b border-dashed border-brand/25')}
-                        key={`${group.range.start}-${group.range.end}`}
-                        aria-label={mode === 'fixed' ? `第 ${groupIndex + 1} 份，${group.range.start} 到 ${group.range.end} 页` : undefined}
+                        className={cx('grid grid-cols-2 items-start gap-4 pb-4 max-[540px]:gap-3 max-[360px]:grid-cols-1', mode !== 'each' && groupIndex < previewGroups.length - 1 && 'border-b border-dashed border-brand/25')}
+                        key={`${groupIndex}-${group.range.start}-${group.range.end}`}
+                        aria-label={mode !== 'each' ? `第 ${groupIndex + 1} 份，${group.range.start} 到 ${group.range.end} 页` : undefined}
                       >
-                        {mode === 'fixed' && Number.isInteger(chunkSize) && chunkSize > 0 && (
+                        {mode !== 'each' && (mode === 'custom' || (Number.isInteger(chunkSize) && chunkSize > 0)) && (
                           <div className="col-span-full flex items-center justify-between gap-3 text-xs text-muted max-[360px]:col-span-1">
                             <span className="font-semibold text-brand">第 {groupIndex + 1} 份</span>
                             <span>{group.range.start}-{group.range.end} 页</span>
@@ -664,12 +691,17 @@ function App() {
                             type="button"
                             onClick={() => setPreviewContext({
                               page: thumbnail.pageNumber,
-                              range: { start: 1, end: source.pageCount },
+                              range: mode === 'custom' ? group.range : { start: 1, end: source.pageCount },
                               label: source.file.name,
                             })}
                             aria-label={`全屏查看第 ${thumbnail.pageNumber} 页`}
                           >
-                            <img className="block aspect-[.71] w-full border border-black/10 bg-white object-contain" src={thumbnail.url} alt={`第 ${thumbnail.pageNumber} 页预览`} />
+                            <img
+                              className="block h-auto w-full border border-black/10 bg-white object-contain"
+                              style={{ aspectRatio: `${thumbnail.width} / ${thumbnail.height}` }}
+                              src={thumbnail.url}
+                              alt={`第 ${thumbnail.pageNumber} 页预览`}
+                            />
                             <span className="absolute right-2 bottom-2 grid min-w-7 place-items-center rounded-[5px] bg-ink/85 px-2 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm">{thumbnail.pageNumber}</span>
                             <span className="absolute top-2 right-2 grid size-[30px] -translate-y-1 place-items-center rounded-md border border-black/10 bg-white/90 text-ink opacity-0 transition-all duration-200 group-hover/thumb:translate-y-0 group-hover/thumb:opacity-100 group-focus-visible/thumb:translate-y-0 group-focus-visible/thumb:opacity-100 max-[540px]:size-7 max-[540px]:translate-y-0 max-[540px]:opacity-100" aria-hidden="true"><Maximize2 size={15} /></span>
                           </button>
@@ -677,6 +709,11 @@ function App() {
                       </section>
                     ))}
                   </div>
+                  {mode === 'custom' && previewGroups.length === 0 && (
+                    <div className="grid min-h-40 place-items-center px-4 text-center text-sm leading-relaxed text-muted">
+                      输入有效页码范围后，这里只显示将要生成的页面
+                    </div>
+                  )}
                   {thumbnails.length < source.pageCount && (
                     <div className="mt-4 grid aspect-[.71] w-[calc(50%-8px)] place-items-center rounded-[5px] border border-black/10 bg-slate-100/80 text-faint max-[540px]:w-[calc(50%-6px)] max-[360px]:w-full" aria-label="正在生成预览"><RefreshCw className="animate-spin" size={20} /></div>
                   )}
@@ -689,7 +726,7 @@ function App() {
         {error && <div className="mt-4 flex min-h-12 items-center gap-2.5 rounded-lg border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] text-danger shadow-[0_8px_20px_rgba(196,65,53,.07)]" role="alert"><Info size={18} /><span className="flex-1">{error}</span><button className="grid size-9 place-items-center rounded-md border-0 bg-transparent" type="button" onClick={() => setError('')} aria-label="关闭错误提示"><X size={17} /></button></div>}
 
         {outputs.length > 0 && source && (
-          <section className={cx(ui.glassPanel, 'mx-auto mt-6 max-w-[960px] animate-success-morph border-emerald-100/60 bg-[linear-gradient(135deg,rgba(236,253,245,.72),rgba(255,251,235,.66),rgba(255,255,255,.5))] p-6 max-[540px]:p-4.5')} aria-labelledby="results-title">
+          <section ref={resultsRef} className={cx(ui.glassPanel, 'mx-auto mt-6 max-w-[960px] scroll-mt-20 animate-success-morph border-emerald-100/60 bg-[linear-gradient(135deg,rgba(236,253,245,.72),rgba(255,251,235,.66),rgba(255,255,255,.5))] p-6 max-[540px]:p-4.5')} aria-labelledby="results-title">
             <div className="flex items-center justify-between gap-6 max-[540px]:flex-col max-[540px]:items-stretch">
               <div className={ui.sectionHeading}>
                 <span className="grid size-11 shrink-0 animate-success-pop place-items-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"><Check size={22} /></span>
@@ -713,18 +750,16 @@ function App() {
                       {remainder && <em className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold not-italic text-amber-700">剩余页</em>}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 max-[540px]:ml-[50px] max-[540px]:w-[calc(100%-50px)] max-[540px]:justify-end">
+                  <div className="flex flex-wrap items-center justify-end gap-1.5 max-[540px]:ml-[50px] max-[540px]:w-[calc(100%-50px)]">
                     <div className="flex items-center gap-1 opacity-100 transition-opacity duration-200 md:pointer-events-none md:opacity-0 md:group-hover:pointer-events-auto md:group-hover:opacity-100 md:group-focus-within:pointer-events-auto md:group-focus-within:opacity-100">
                       <button className="grid size-10 place-items-center rounded-lg border border-black/10 bg-white/65 text-muted transition-all duration-200 hover:bg-brand-soft hover:text-brand" type="button" onClick={() => void handleCopyOutput(output)} aria-label={`复制 ${output.name}`} title="复制 PDF"><Copy size={17} /></button>
                       <button className="grid size-10 place-items-center rounded-lg border border-black/10 bg-white/65 text-muted transition-all duration-200 hover:bg-brand-soft hover:text-brand" type="button" onClick={() => openOutputPreview(output)} aria-label={`预览 ${output.name}`} title="快速预览"><Eye size={18} /></button>
                     </div>
-                    <button
-                      className="inline-flex min-h-11 min-w-[150px] items-center justify-center gap-2 rounded-lg bg-transparent px-2 text-[13px] font-semibold text-brand transition-colors duration-200 hover:bg-brand-soft max-[540px]:min-w-0 max-[540px]:flex-1 max-[540px]:justify-start"
-                      type="button"
-                      onClick={() => void shareOrDownloadPdf(output)}
-                      aria-label={`分享或保存 ${output.name}`}
-                    >
-                      <Share2 size={17} /> <span>分享或保存</span><ChevronRight className="max-[540px]:ml-auto" size={16} />
+                    <button className="inline-flex min-h-11 min-w-[88px] items-center justify-center gap-2 rounded-lg bg-brand-soft px-3 text-[13px] font-semibold text-brand transition-colors duration-200 hover:bg-blue-100" type="button" onClick={() => downloadPdf(output)} aria-label={`下载 ${output.name}`}>
+                      <Download size={17} /> <span>下载</span>
+                    </button>
+                    <button className="inline-flex min-h-11 min-w-[80px] items-center justify-center gap-2 rounded-lg bg-transparent px-2 text-[13px] font-semibold text-brand transition-colors duration-200 hover:bg-brand-soft" type="button" onClick={() => void handleShareOutput(output)} aria-label={`分享 ${output.name}`}>
+                      <Share2 size={17} /> <span>分享</span>
                     </button>
                   </div>
                 </div>

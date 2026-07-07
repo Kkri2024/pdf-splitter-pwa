@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { copyPdfToClipboard } from './download'
+import { copyPdfToClipboard, downloadPdf, sharePdf } from './download'
 import type { SplitOutput } from './pdfSplitter'
 
 const output: SplitOutput = {
@@ -43,5 +43,49 @@ describe('copyPdfToClipboard', () => {
     } as unknown as Clipboard
     await expect(copyPdfToClipboard(output, clipboard, TestClipboardItem as unknown as typeof ClipboardItem))
       .resolves.toBe('failed')
+  })
+})
+
+describe('single PDF actions', () => {
+  it('downloads one output directly', () => {
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:download')
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+
+    downloadPdf(output)
+
+    expect(createObjectURL).toHaveBeenCalledOnce()
+    expect(click).toHaveBeenCalledOnce()
+    click.mockRestore()
+    createObjectURL.mockRestore()
+    revokeObjectURL.mockRestore()
+  })
+
+  it('shares a PDF through the system share sheet', async () => {
+    const share = vi.fn().mockResolvedValue(undefined)
+    const canShare = vi.fn().mockReturnValue(true)
+    vi.stubGlobal('navigator', { share, canShare })
+
+    await expect(sharePdf(output)).resolves.toBe('shared')
+    expect(share).toHaveBeenCalledOnce()
+    vi.unstubAllGlobals()
+  })
+
+  it('reports a cancelled system share', async () => {
+    const share = vi.fn().mockRejectedValue(new DOMException('cancelled', 'AbortError'))
+    vi.stubGlobal('navigator', { share, canShare: () => true })
+
+    await expect(sharePdf(output)).resolves.toBe('cancelled')
+    vi.unstubAllGlobals()
+  })
+
+  it('reports unsupported sharing without starting a download', async () => {
+    vi.stubGlobal('navigator', {})
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+
+    await expect(sharePdf(output)).resolves.toBe('unsupported')
+    expect(click).not.toHaveBeenCalled()
+    click.mockRestore()
+    vi.unstubAllGlobals()
   })
 })

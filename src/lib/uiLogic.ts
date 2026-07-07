@@ -12,15 +12,36 @@ export function createPreviewGroups(
   totalPages: number,
   mode: SplitMode,
   chunkSize: number,
+  plan: PageRange[] = [],
 ): PreviewGroup[] {
   if (totalPages < 1) return []
-  if (mode !== 'fixed' || !Number.isInteger(chunkSize) || chunkSize < 1) {
+  if (mode === 'each') {
+    return [{ index: 0, range: { start: 1, end: totalPages }, thumbnails }]
+  }
+
+  if (mode === 'custom') {
+    return plan.map((range, index) => ({
+      index,
+      range,
+      thumbnails: thumbnails.filter(
+        (thumbnail) => thumbnail.pageNumber >= range.start && thumbnail.pageNumber <= range.end,
+      ),
+    }))
+  }
+
+  if (!Number.isInteger(chunkSize) || chunkSize < 1) {
     return [{ index: 0, range: { start: 1, end: totalPages }, thumbnails }]
   }
 
   const groups: PreviewGroup[] = []
-  for (let start = 1, index = 0; start <= totalPages; start += chunkSize, index += 1) {
-    const range = { start, end: Math.min(start + chunkSize - 1, totalPages) }
+  const fixedPlan = plan.length > 0
+    ? plan
+    : Array.from({ length: Math.ceil(totalPages / chunkSize) }, (_, index) => ({
+        start: index * chunkSize + 1,
+        end: Math.min((index + 1) * chunkSize, totalPages),
+      }))
+
+  fixedPlan.forEach((range, index) => {
     groups.push({
       index,
       range,
@@ -28,7 +49,7 @@ export function createPreviewGroups(
         (thumbnail) => thumbnail.pageNumber >= range.start && thumbnail.pageNumber <= range.end,
       ),
     })
-  }
+  })
   return groups
 }
 
