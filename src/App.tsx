@@ -13,14 +13,16 @@ import {
   FileText,
   History as HistoryIcon,
   Info,
+  ListChecks,
+  ListRestart,
   LockKeyhole,
-  Maximize2,
   PackageOpen,
   RefreshCw,
   Redo2,
   RotateCcw,
   RotateCw,
   Scissors,
+  Settings2,
   Share2,
   ShieldCheck,
   Trash2,
@@ -140,6 +142,7 @@ function App() {
   const [online, setOnline] = useState(navigator.onLine)
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [showInstallHelp, setShowInstallHelp] = useState(false)
+  const [editorExpanded, setEditorExpanded] = useState(false)
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>(() => loadHistory())
   const [showHistory, setShowHistory] = useState(false)
   const [confirmClearHistory, setConfirmClearHistory] = useState(false)
@@ -201,6 +204,7 @@ function App() {
     setBusy('idle')
     setProgress({ current: 0, total: 0 })
     setZipProgress(0)
+    setEditorExpanded(false)
     dispatchEdit({ type: 'initialize', pageCount: 0 })
     if (inputRef.current) inputRef.current.value = ''
   }, [cleanupPreview])
@@ -381,6 +385,7 @@ function App() {
     if (!file || busy !== 'idle') return
     setError('')
     setOutputs([])
+    setEditorExpanded(false)
 
     const looksLikePdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
     if (!looksLikePdf) {
@@ -410,7 +415,6 @@ function App() {
       const initialEnd = Math.min(loaded.pageCount, 3)
       setRangeSpec(`1-${initialEnd}`)
       dispatchEdit({ type: 'initialize', pageCount: loaded.pageCount })
-      dispatchEdit({ type: 'set-selection', ids: Array.from({ length: initialEnd }, (_, index) => `page-${index + 1}`) })
       setBusy('idle')
     } catch (loadError) {
       if (generation === generationRef.current) {
@@ -749,7 +753,7 @@ function App() {
               <section className={cx(ui.glassPanel, 'animate-surface-enter p-6 max-[540px]:p-4.5')} aria-labelledby="split-settings-title">
                 <div className={ui.sectionHeading}>
                   <span className={ui.stepNumber}>1</span>
-                  <div><h2 className="mb-1 text-[17px] leading-tight font-semibold" id="split-settings-title">选择分割方式</h2><p className="text-xs leading-snug text-muted">设置每份文件包含的页面</p></div>
+                  <h2 className="text-[17px] leading-tight font-semibold" id="split-settings-title">分割方式</h2>
                 </div>
 
                 <div className="mt-6 grid grid-cols-3 gap-1 rounded-lg border border-black/5 bg-slate-200/80 p-1" role="tablist" aria-label="分割方式">
@@ -764,7 +768,17 @@ function App() {
                         setMode(option.value)
                         setOutputs([])
                         setError('')
-                        if (option.value === 'custom') setRangeSpec(selectedIdsToRangeSpec(editState.present.selectedIds, editState.present.pages))
+                        if (option.value === 'custom') {
+                          if (editState.present.selectedIds.length > 0) {
+                            setRangeSpec(selectedIdsToRangeSpec(editState.present.selectedIds, editState.present.pages))
+                          } else {
+                            try {
+                              dispatchEdit({ type: 'set-selection', ids: rangesToSelectedIds(parseRangeSpec(rangeSpec, editState.present.pages.length), editState.present.pages) })
+                            } catch {
+                              setRangeSpec('')
+                            }
+                          }
+                        }
                       }}
                       disabled={isBusy}
                     >
@@ -795,7 +809,7 @@ function App() {
                   {mode === 'each' && (
                     <div className="flex min-h-[70px] items-center gap-3">
                       <span className="grid size-[34px] place-items-center rounded-lg bg-success-soft text-success"><Check size={18} /></span>
-                      <div><strong className="text-sm">每页生成一份 PDF</strong><p className="mt-1 text-xs text-muted">预计生成 {editState.present.pages.length} 个文件</p></div>
+                      <strong className="text-sm">预计 {editState.present.pages.length} 份</strong>
                     </div>
                   )}
                   {mode === 'custom' && (
@@ -809,9 +823,7 @@ function App() {
                         placeholder="例如：1-3,5,8-10"
                         onChange={(event) => handleRangeChange(event.target.value)}
                         disabled={isBusy}
-                        aria-describedby="range-help"
                       />
-                      <small className="font-normal leading-relaxed text-muted" id="range-help">用逗号分隔，每个范围生成一份文件</small>
                       <span className="grid grid-cols-2 gap-1 rounded-lg bg-slate-200/80 p-1" role="group" aria-label="自定义页面输出方式">
                         <button type="button" className={cx('min-h-9 rounded-md px-2 text-xs font-semibold text-muted', selectionOutputMode === 'segments' && 'bg-white text-ink shadow-sm')} onClick={() => { setSelectionOutputMode('segments'); setOutputs([]) }}>连续段拆分</button>
                         <button type="button" className={cx('min-h-9 rounded-md px-2 text-xs font-semibold text-muted', selectionOutputMode === 'merged' && 'bg-white text-ink shadow-sm')} onClick={() => { setSelectionOutputMode('merged'); setOutputs([]) }}>合并为一份</button>
@@ -831,9 +843,6 @@ function App() {
                   {busy === 'splitting' ? <RefreshCw className="animate-spin" size={18} /> : <Scissors size={18} />}
                   {splitButtonLabel}
                 </button>
-                <button className={cx(ui.secondaryButton, 'mt-2.5 w-full')} type="button" onClick={() => void handleExportEdited()} disabled={isBusy || editState.present.pages.length === 0}>
-                  <FileOutput size={18} /> 导出完整 PDF
-                </button>
                 {busy === 'splitting' && (
                   <div className="mt-3 h-1 overflow-hidden rounded-sm bg-slate-200" aria-label="分割进度">
                     <span className="block h-full bg-brand transition-[width] duration-200" style={{ width: `${progress.total ? (progress.current / progress.total) * 100 : 0}%` }} />
@@ -842,26 +851,35 @@ function App() {
               </section>
 
               <section className={cx(ui.glassPanel, 'min-w-0 animate-surface-enter p-6 [animation-delay:40ms] max-[540px]:p-4.5')} aria-labelledby="preview-title">
-                <div className={ui.sectionHeading}>
-                  <span className="grid size-[34px] shrink-0 place-items-center rounded-lg bg-coral-soft text-sm font-bold text-coral">2</span>
-                  <div><h2 className="mb-1 text-[17px] leading-tight font-semibold" id="preview-title">页面编辑与预览</h2><p className="text-xs leading-snug text-muted">已选 {editState.present.selectedIds.length} 页 · 当前 {editState.present.pages.length} 页</p></div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className={ui.sectionHeading}>
+                    <span className="grid size-[34px] shrink-0 place-items-center rounded-lg bg-coral-soft text-sm font-bold text-coral">2</span>
+                    <div><h2 className="text-[17px] leading-tight font-semibold" id="preview-title">页面</h2><p className="mt-1 text-xs text-muted">{editState.present.pages.length} 页{editState.present.selectedIds.length > 0 ? ` · 已选 ${editState.present.selectedIds.length}` : ''}</p></div>
+                  </div>
+                  <button className={cx('relative grid size-11 place-items-center rounded-lg border transition-colors', editorExpanded ? 'border-brand/20 bg-brand-soft text-brand' : 'border-black/10 bg-white/60 text-muted hover:text-brand')} type="button" onClick={() => setEditorExpanded((expanded) => !expanded)} aria-expanded={editorExpanded} aria-label={editorExpanded ? '收起页面编辑工具' : '展开页面编辑工具'} title={editorExpanded ? '收起编辑' : '编辑页面'}>
+                    <Settings2 size={19} />
+                    {editState.past.length > 0 && <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-amber-500 ring-2 ring-white" aria-label="已有页面编辑" />}
+                  </button>
                 </div>
-                <div className="mt-4 flex flex-wrap items-center gap-1.5 rounded-lg border border-black/8 bg-white/45 p-2">
-                  <button className="min-h-10 rounded-md px-2.5 text-xs font-semibold text-brand hover:bg-brand-soft" type="button" onClick={handleToggleAllPages}>{editState.present.selectedIds.length === editState.present.pages.length ? '取消全选' : '全选'}</button>
-                  <span className="mx-1 h-6 w-px bg-black/10" aria-hidden="true" />
+                {editorExpanded && <div className="mt-4 flex animate-fade-in flex-wrap items-center gap-1.5 rounded-lg border border-black/8 bg-white/45 p-2">
+                  <button className="grid size-10 place-items-center rounded-md text-brand hover:bg-brand-soft" type="button" onClick={handleToggleAllPages} aria-label={editState.present.selectedIds.length === editState.present.pages.length ? '取消全选' : '全选页面'} title={editState.present.selectedIds.length === editState.present.pages.length ? '取消全选' : '全选'}><ListChecks size={18} /></button>
                   <button className="grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'rotate', direction: -1 })} disabled={isBusy || editState.present.selectedIds.length === 0} aria-label="所选页面向左旋转" title="向左旋转"><RotateCcw size={18} /></button>
                   <button className="grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'rotate', direction: 1 })} disabled={isBusy || editState.present.selectedIds.length === 0} aria-label="所选页面向右旋转" title="向右旋转"><RotateCw size={18} /></button>
                   <button className="grid size-10 place-items-center rounded-md text-muted hover:bg-danger-soft hover:text-danger disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'delete-selected' })} disabled={isBusy || editState.present.selectedIds.length === 0} aria-label="删除所选页面" title="删除"><Trash2 size={18} /></button>
                   <span className="mx-1 h-6 w-px bg-black/10" aria-hidden="true" />
                   <button className="grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'undo' })} disabled={isBusy || editState.past.length === 0} aria-label="撤销页面编辑" title="撤销"><Undo2 size={18} /></button>
                   <button className="grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'redo' })} disabled={isBusy || editState.future.length === 0} aria-label="重做页面编辑" title="重做"><Redo2 size={18} /></button>
-                  <button className="ml-auto min-h-10 rounded-md px-2.5 text-xs font-semibold text-muted hover:bg-white hover:text-brand" type="button" onClick={() => applyPageEdit({ type: 'restore' })} disabled={isBusy}>恢复原始</button>
-                </div>
+                  <span className="mx-1 h-6 w-px bg-black/10" aria-hidden="true" />
+                  <button className="grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => void handleExportEdited()} disabled={isBusy || editState.present.pages.length === 0} aria-label="导出编辑后的完整 PDF" title="导出完整 PDF"><FileOutput size={18} /></button>
+                  <button className="grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'restore' })} disabled={isBusy} aria-label="恢复原始页面" title="恢复原始"><ListRestart size={18} /></button>
+                </div>}
                 <PageEditorGrid
                   pages={editState.present.pages}
                   selectedIds={editState.present.selectedIds}
                   thumbnails={thumbnails}
                   disabled={isBusy}
+                  editing={editorExpanded}
+                  showSelection={mode === 'custom' || editorExpanded}
                   onToggle={handleTogglePage}
                   onMove={(activeId, overId) => applyPageEdit({ type: 'move', activeId, overId })}
                   onMoveTo={(id, position) => applyPageEdit({ type: 'move-to', id, position })}
@@ -1005,7 +1023,7 @@ function App() {
               <div className="flex shrink-0 items-center gap-2">
                 <button
                   className={cx(
-                    'inline-flex min-h-11 items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition-colors',
+                    'grid size-11 place-items-center rounded-lg border transition-colors',
                     editState.present.selectedIds.includes(previewPage.id)
                       ? 'border-brand bg-brand text-white'
                       : 'border-white/15 bg-white/10 text-white hover:bg-white/20',
@@ -1013,10 +1031,10 @@ function App() {
                   type="button"
                   onClick={() => handleTogglePage(previewPage.id)}
                   aria-pressed={editState.present.selectedIds.includes(previewPage.id)}
+                  aria-label={editState.present.selectedIds.includes(previewPage.id) ? '取消选中当前页面' : '选中当前页面'}
+                  title={editState.present.selectedIds.includes(previewPage.id) ? '取消选中' : '选中本页'}
                 >
                   <Check size={17} />
-                  <span className="max-[390px]:hidden">{editState.present.selectedIds.includes(previewPage.id) ? '取消选中' : '选中本页'}</span>
-                  <span className="hidden max-[390px]:inline">{editState.present.selectedIds.includes(previewPage.id) ? '取消' : '选中'}</span>
                 </button>
                 <button className="grid size-11 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/10" type="button" onClick={closePagePreview} aria-label="关闭高清预览" title="关闭"><X size={20} /></button>
               </div>
