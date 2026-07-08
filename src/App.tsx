@@ -102,18 +102,18 @@ const cx = (...classes: Array<string | false | null | undefined>) => classes.fil
 
 const ui = {
   appShell: 'mesh-background relative isolate flex min-h-screen flex-col overflow-x-hidden text-ink',
-  topbar: 'sticky top-0 z-20 flex h-16 items-center justify-between border-b border-white/20 bg-white/40 px-6 py-3 shadow-2xl shadow-blue-500/5 backdrop-blur-xl backdrop-saturate-150 transition-all duration-500 ease-out [padding-left:max(24px,env(safe-area-inset-left))] [padding-right:max(24px,env(safe-area-inset-right))] [padding-top:max(12px,env(safe-area-inset-top))] max-[540px]:h-[58px] max-[540px]:px-3.5 max-[540px]:[padding-left:max(14px,env(safe-area-inset-left))] max-[540px]:[padding-right:max(14px,env(safe-area-inset-right))]',
+  topbar: 'sticky top-0 z-20 flex h-16 items-center justify-between border-b border-white/50 bg-white/55 px-6 py-3 shadow-[0_10px_30px_rgba(73,137,214,.08)] backdrop-blur-2xl backdrop-saturate-150 transition-all duration-300 [padding-left:max(24px,env(safe-area-inset-left))] [padding-right:max(24px,env(safe-area-inset-right))] [padding-top:max(12px,env(safe-area-inset-top))] max-[540px]:h-[58px] max-[540px]:px-3.5 max-[540px]:[padding-left:max(14px,env(safe-area-inset-left))] max-[540px]:[padding-right:max(14px,env(safe-area-inset-right))]',
   brand: 'flex items-center gap-2.5 whitespace-nowrap text-[15px] font-semibold max-[540px]:text-sm max-[360px]:[&>span:last-child]:hidden',
   brandMark: 'grid size-[34px] place-items-center rounded-lg bg-brand text-white shadow-[0_8px_18px_rgba(18,100,229,.23)]',
   topbarActions: 'flex items-center gap-2.5 max-[540px]:gap-2',
   statusChip: 'flex min-h-8 items-center gap-1.5 rounded-lg border border-success/10 bg-success-soft/90 px-2.5 text-xs font-semibold text-success max-[540px]:hidden',
   topButton: 'flex h-9 items-center gap-1.5 rounded-lg border border-white/30 bg-white/35 px-2.5 text-sm text-ink shadow-sm backdrop-blur-xl transition-all duration-500 ease-out hover:-translate-y-px hover:border-blue-300/40 hover:bg-white/60 hover:shadow-md max-[540px]:size-10 max-[540px]:justify-center max-[540px]:px-2 max-[540px]:[&>span]:hidden',
-  workspace: 'mx-auto w-[min(1120px,calc(100%-48px))] flex-1 animate-page-enter py-13 pb-16 max-[900px]:w-[min(740px,calc(100%-32px))] max-[900px]:pt-10 max-[540px]:w-[calc(100%-24px)] max-[540px]:py-7.5 max-[540px]:pb-12',
-  glassPanel: 'rounded-lg border border-white/20 bg-white/40 shadow-2xl shadow-blue-500/5 backdrop-blur-xl backdrop-saturate-150 transition-all duration-500 ease-out',
+  workspace: 'mx-auto w-[min(1120px,calc(100%-48px))] flex-1 animate-page-enter pt-15 pb-16 max-[900px]:w-[min(740px,calc(100%-32px))] max-[900px]:pt-12 max-[540px]:w-[calc(100%-24px)] max-[540px]:pt-9 max-[540px]:pb-12',
+  glassPanel: 'rounded-lg border border-white/65 bg-white/58 shadow-glass backdrop-blur-2xl backdrop-saturate-150 transition-all duration-300 ease-out',
   intro: 'mb-7 flex items-end justify-between gap-8 max-[900px]:flex-col max-[900px]:items-start max-[900px]:gap-3 max-[540px]:mb-5.5',
   sectionHeading: 'flex items-center gap-3',
   iconButton: 'grid size-10 shrink-0 place-items-center rounded-lg border-0 bg-transparent text-muted transition-all duration-200 hover:bg-danger-soft hover:text-danger active:scale-95 disabled:pointer-events-none disabled:opacity-40',
-  primaryButton: 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border-0 bg-brand px-5 font-semibold text-white shadow-[0_8px_18px_rgba(18,100,229,.2)] transition-all duration-500 ease-out hover:-translate-y-px hover:bg-brand-hover hover:shadow-[0_11px_23px_rgba(18,100,229,.26)] active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none',
+  primaryButton: 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/25 bg-[#2388ff] px-5 font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,.35),inset_0_0_14px_rgba(255,255,255,.12),0_10px_24px_rgba(35,136,255,.28)] transition-all duration-300 ease-out hover:-translate-y-px hover:bg-[#117af0] hover:shadow-[inset_0_1px_0_rgba(255,255,255,.4),inset_0_0_16px_rgba(255,255,255,.15),0_13px_28px_rgba(35,136,255,.34)] active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none',
   secondaryButton: 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-black/10 bg-slate-200/80 px-4 font-semibold text-ink transition-all duration-200 active:scale-[.98]',
   stepNumber: 'grid size-[34px] shrink-0 place-items-center rounded-lg bg-brand text-sm font-bold text-white shadow-[0_7px_15px_rgba(18,100,229,.16)]',
   thumbnail: 'group/thumb relative m-0 min-w-0 cursor-zoom-in overflow-hidden rounded-[5px] border-0 bg-white p-0 shadow-[0_6px_18px_rgba(31,43,58,.1)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_26px_rgba(31,43,58,.16)]',
@@ -678,7 +678,7 @@ function App() {
               <p className="m-0 flex items-center gap-1.5 text-[13px] font-semibold text-success max-[540px]:text-xs"><ShieldCheck size={16} /> 本地处理，不上传文件</p>
               <span className="flex min-h-6 items-center gap-1 rounded-lg border border-slate-600/10 bg-white/55 px-2 text-[11px] font-semibold text-slate-600 max-[360px]:hidden"><LockKeyhole size={13} /> 无网络传输</span>
             </div>
-            <h1 className="m-0 text-4xl leading-[1.16] font-black tracking-wide max-[900px]:text-[32px] max-[540px]:text-[28px]" id="page-title">拆分 PDF，清楚又利落</h1>
+            <h1 className="m-0 text-4xl leading-[1.16] font-black tracking-[.025em] text-[#333333] max-[900px]:text-[32px] max-[540px]:text-[28px]" id="page-title">拆分 PDF，清楚又利落</h1>
           </div>
           <p className="mb-1 max-w-[390px] text-[15px] leading-relaxed text-slate-600/75 max-[900px]:max-w-[560px] max-[540px]:text-sm">选择一个文件，按固定页数、逐页或自定义范围生成新的 PDF。</p>
         </section>
@@ -749,21 +749,21 @@ function App() {
               </div>
             )}
 
-            <div className="mt-6 grid grid-cols-[minmax(320px,.78fr)_minmax(0,1.22fr)] items-start gap-6 max-[900px]:grid-cols-1">
-              <section className={cx(ui.glassPanel, 'animate-surface-enter p-6 max-[540px]:p-4.5')} aria-labelledby="split-settings-title">
+            <div className="mt-8 grid grid-cols-[minmax(320px,.78fr)_minmax(0,1.22fr)] items-start gap-7 max-[900px]:grid-cols-1 max-[540px]:mt-6 max-[540px]:gap-5">
+              <section className={cx(ui.glassPanel, 'animate-surface-enter px-8 py-7 max-[540px]:px-5 max-[540px]:py-5')} aria-labelledby="split-settings-title">
                 <div className={ui.sectionHeading}>
                   <span className={ui.stepNumber}>1</span>
                   <h2 className="text-[17px] leading-tight font-semibold" id="split-settings-title">分割方式</h2>
                 </div>
 
-                <div className="mt-6 grid grid-cols-3 gap-1 rounded-lg border border-black/5 bg-slate-200/80 p-1" role="tablist" aria-label="分割方式">
+                <div className="mt-7 grid grid-cols-3 gap-2 bg-transparent" role="tablist" aria-label="分割方式">
                   {modeOptions.map((option) => (
                     <button
                       key={option.value}
                       type="button"
                       role="tab"
                       aria-selected={mode === option.value}
-                      className={cx('h-[38px] min-w-0 cursor-pointer rounded-md border-0 bg-transparent px-2 text-[13px] font-semibold whitespace-nowrap text-muted transition-all duration-200 max-[540px]:text-xs', mode === option.value && 'bg-white text-ink shadow-[0_2px_8px_rgba(29,36,47,.12)]')}
+                      className={cx('h-10 min-w-0 cursor-pointer rounded-full border border-[#e0e0e0] bg-white/45 px-2 text-[13px] font-semibold whitespace-nowrap text-muted transition-all duration-200 hover:border-brand/35 hover:bg-white/75 max-[540px]:text-xs', mode === option.value && 'border-brand/35 bg-brand-soft text-brand shadow-[0_4px_12px_rgba(40,120,232,.12)]')}
                       onClick={() => {
                         setMode(option.value)
                         setOutputs([])
@@ -787,13 +787,13 @@ function App() {
                   ))}
                 </div>
 
-                <div className="min-h-[108px] pt-5.5">
+                <div className="min-h-[120px] pt-8">
                   {mode === 'fixed' && (
                     <label className="flex flex-col gap-2 text-[13px] font-semibold text-ink">
                       <span>每份页数</span>
                       <div className="flex items-center gap-2.5">
                         <input
-                          className="h-11 w-[98px] rounded-lg border border-black/20 bg-white/90 px-3 text-base font-semibold text-ink transition-shadow focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand/15"
+                          className="h-11 w-[98px] rounded-lg border border-[#e0e0e0] bg-white/90 px-3 text-base font-semibold text-ink transition-shadow focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand/15"
                           type="number"
                           min="1"
                           max={editState.present.pages.length}
@@ -816,7 +816,7 @@ function App() {
                     <label className="flex flex-col gap-2 text-[13px] font-semibold text-ink">
                       <span>页码范围</span>
                       <input
-                        className="h-11 w-full rounded-lg border border-black/20 bg-white/90 px-3 text-ink transition-shadow focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand/15"
+                        className="h-11 w-full rounded-lg border border-[#e0e0e0] bg-white/90 px-3 text-ink transition-shadow focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand/15"
                         type="text"
                         inputMode="text"
                         value={rangeSpec}

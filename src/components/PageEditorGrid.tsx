@@ -88,17 +88,17 @@ function SortablePage({
   return (
     <article
       ref={setNodeRef}
-      className={`group/page relative min-w-0 overflow-visible rounded-md border bg-white shadow-[0_6px_18px_rgba(31,43,58,.1)] transition-all duration-200 ${showSelection && selected ? 'border-brand ring-3 ring-brand/15' : 'border-black/10'} ${isDragging || menuOpen ? 'z-20 shadow-2xl' : ''}`}
+      className={`group/page relative min-w-0 overflow-visible rounded-lg border bg-white/85 shadow-[0_7px_20px_rgba(73,137,214,.08)] transition-all duration-200 ${showSelection && selected ? 'border-2 border-brand ring-4 ring-brand/15 shadow-[0_9px_26px_rgba(40,120,232,.18)]' : 'border-[#e0e0e0]'} ${isDragging || menuOpen ? 'z-20 shadow-2xl' : ''}`}
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
-      <button type="button" className="block w-full cursor-zoom-in overflow-hidden rounded-t-md border-0 bg-transparent p-0" onClick={() => onOpen(page.id)} aria-label={`全屏查看当前第 ${index + 1} 页`}>
+      <button type="button" className="block w-full cursor-zoom-in overflow-hidden rounded-t-lg border-0 bg-transparent p-0" onClick={() => onOpen(page.id)} aria-label={`全屏查看当前第 ${index + 1} 页`}>
         {thumbnail ? (
           <img className="block h-auto w-full bg-white object-contain" style={{ aspectRatio: `${thumbnail.width} / ${thumbnail.height}` }} src={thumbnail.url} alt={`当前第 ${index + 1} 页预览`} />
         ) : (
           <span className="grid aspect-[.71] w-full place-items-center bg-slate-100 text-xs text-faint">准备预览...</span>
         )}
       </button>
-      <footer className={`relative flex min-h-12 items-center gap-2 rounded-b-md border-t px-2.5 ${showSelection && selected ? 'border-brand/15 bg-brand-soft/55' : 'border-black/8 bg-slate-50/90'}`}>
+      <footer className={`relative flex min-h-12 items-center gap-2 rounded-b-lg border-t px-2.5 ${showSelection && selected ? 'border-brand/15 bg-brand-soft/55' : 'border-[#e0e0e0] bg-slate-50/90'}`}>
         {showSelection && (
           <button
             type="button"
@@ -176,14 +176,14 @@ export function PageEditorGrid(props: PageEditorGridProps) {
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={props.pages.map((page) => page.id)} strategy={rectSortingStrategy}>
-        <div ref={scrollRef} className="mt-4 h-[520px] overflow-y-auto px-1 [scrollbar-color:rgba(92,102,117,.35)_transparent] [scrollbar-width:thin] max-[900px]:h-[560px] max-[540px]:h-[500px]">
+        <div ref={scrollRef} className="mt-5 h-[520px] overflow-y-auto px-1.5 [scrollbar-color:rgba(92,102,117,.35)_transparent] [scrollbar-width:thin] max-[900px]:h-[560px] max-[540px]:h-[500px]">
           <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
             {virtualizer.getVirtualItems().map((virtualRow) => (
               <div
                 ref={virtualizer.measureElement}
                 data-index={virtualRow.index}
                 key={virtualRow.key}
-                className="absolute top-0 left-0 grid w-full grid-cols-2 items-start gap-4 pb-4 max-[540px]:gap-3 max-[330px]:grid-cols-1"
+                className="absolute top-0 left-0 grid w-full grid-cols-2 items-start gap-5 pb-5 max-[540px]:gap-4 max-[540px]:pb-4 max-[330px]:grid-cols-1"
                 style={{ transform: `translateY(${virtualRow.start}px)` }}
               >
                 {rows[virtualRow.index].map((page) => (
