@@ -8,6 +8,11 @@ export interface PageRange {
   end: number
 }
 
+export type OutputPageMeta = EditablePage & {
+  sourceId?: string
+  sourceName?: string
+}
+
 export interface CreateSplitPlanOptions {
   pagesPerFile?: number
   rangeSpec?: string
@@ -18,7 +23,7 @@ export interface SplitOutput {
   bytes: Uint8Array
   range: PageRange
   pageCount: number
-  pages?: EditablePage[]
+  pages?: OutputPageMeta[]
 }
 
 export class PdfSplitError extends Error {

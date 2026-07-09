@@ -11,7 +11,7 @@ export interface HistoryEntry {
   sourceName: string
   sourceSize: number
   pageCount: number
-  mode: SplitMode
+  mode: SplitMode | 'merge'
   modeSummary: string
   outputCount: number
   outputBytes: number
@@ -41,7 +41,7 @@ function isHistoryEntry(value: unknown): value is HistoryEntry {
     && typeof entry.sourceName === 'string'
     && typeof entry.sourceSize === 'number'
     && typeof entry.pageCount === 'number'
-    && ['fixed', 'each', 'custom'].includes(String(entry.mode))
+    && ['fixed', 'each', 'custom', 'merge'].includes(String(entry.mode))
     && typeof entry.modeSummary === 'string'
     && typeof entry.outputCount === 'number'
     && typeof entry.outputBytes === 'number'

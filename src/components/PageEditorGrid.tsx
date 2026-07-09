@@ -102,7 +102,7 @@ function SortablePage({
         {showSelection && (
           <button
             type="button"
-            className={`grid size-10 shrink-0 place-items-center rounded-lg border transition-colors ${selected ? 'border-brand bg-brand text-white' : 'border-black/15 bg-white text-transparent hover:border-brand/40'}`}
+            className={`tooltip-button grid size-10 shrink-0 place-items-center rounded-lg border transition-colors ${selected ? 'border-brand bg-brand text-white' : 'border-black/15 bg-white text-transparent hover:border-brand/40'}`}
             onClick={() => onToggle(page.id)}
             aria-label={`${selected ? '取消选择' : '选择'}当前第 ${index + 1} 页`}
             title={selected ? '取消选中' : '选中本页'}
@@ -119,7 +119,7 @@ function SortablePage({
           <>
             <button
             type="button"
-            className="grid size-10 shrink-0 cursor-grab touch-manipulation place-items-center rounded-lg border border-black/10 bg-white text-muted shadow-sm active:cursor-grabbing"
+            className="tooltip-button grid size-10 shrink-0 cursor-grab touch-manipulation place-items-center rounded-lg border border-black/10 bg-white text-muted shadow-sm active:cursor-grabbing"
             aria-label={`拖动当前第 ${index + 1} 页排序`}
             title="拖动排序"
             {...attributes}
@@ -128,14 +128,14 @@ function SortablePage({
             <GripVertical size={18} />
           </button>
             <div ref={menuRef} className="relative">
-              <button type="button" className="grid size-10 place-items-center rounded-lg text-muted hover:bg-white hover:text-ink" onClick={() => setMenuOpen((open) => !open)} aria-label={`第 ${index + 1} 页更多操作`} title="更多操作" aria-expanded={menuOpen}><MoreHorizontal size={19} /></button>
+              <button type="button" className="tooltip-button grid size-10 place-items-center rounded-lg text-muted hover:bg-white hover:text-ink" onClick={() => setMenuOpen((open) => !open)} aria-label={`第 ${index + 1} 页更多操作`} title="更多操作" aria-expanded={menuOpen}><MoreHorizontal size={19} /></button>
               {menuOpen && (
                 <div className="absolute right-0 bottom-12 z-30 w-[190px] rounded-lg border border-black/10 bg-white p-3 shadow-2xl max-[540px]:w-[150px]">
                   <label className="block text-xs font-semibold text-ink">
                     移动到指定页
                     <span className="mt-2 flex items-center gap-2">
                       <input className="h-10 min-w-0 flex-1 rounded-md border border-black/15 px-2 text-center text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15" type="number" min="1" max={pageCount} value={position} onChange={(event) => setPosition(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { submitPosition(); setMenuOpen(false) } }} disabled={disabled} aria-label={`将当前第 ${index + 1} 页移动到第几页`} />
-                      <button type="button" className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand text-white" onClick={() => { submitPosition(); setMenuOpen(false) }} disabled={disabled} aria-label={`将当前页面移到第 ${position} 页`} title="确认移动"><MoveRight size={17} /></button>
+                      <button type="button" className="tooltip-button grid size-10 shrink-0 place-items-center rounded-lg bg-brand text-white" onClick={() => { submitPosition(); setMenuOpen(false) }} disabled={disabled} aria-label={`将当前页面移到第 ${position} 页`} title="确认移动"><MoveRight size={17} /></button>
                     </span>
                   </label>
                 </div>

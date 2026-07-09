@@ -45,6 +45,18 @@ describe('history storage', () => {
     expect(payload.entries[0]).not.toHaveProperty('bytes')
   })
 
+  it('accepts multi-PDF merge history entries', () => {
+    const entries = appendHistory({
+      ...baseEntry,
+      sourceName: '3 个 PDF',
+      mode: 'merge',
+      modeSummary: '多 PDF 合并：6 页',
+      outputCount: 1,
+    }, storage, now)
+    expect(entries[0].mode).toBe('merge')
+    expect(loadHistory(storage, now)[0].modeSummary).toBe('多 PDF 合并：6 页')
+  })
+
   it('removes entries older than 30 days', () => {
     appendHistory(baseEntry, storage, now - 31 * 24 * 60 * 60 * 1000)
     expect(loadHistory(storage, now)).toEqual([])
