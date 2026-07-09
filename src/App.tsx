@@ -9,6 +9,7 @@ import {
   Download,
   Eye,
   FileCheck2,
+  FileImage,
   FileOutput,
   FileText,
   History as HistoryIcon,
@@ -36,7 +37,7 @@ import {
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { PageEditorGrid } from './components/PageEditorGrid'
-import { copyPdfToClipboard, createZip, downloadPdf, sharePdf, triggerDownload } from './lib/download'
+import { copyPdfToClipboard, createFilesZip, createZip, downloadPdf, sharePdf, triggerDownload } from './lib/download'
 import { formatFileSize } from './lib/format'
 import {
   appendHistory,
@@ -59,6 +60,11 @@ import {
   type SplitMode,
   type SplitOutput,
 } from './lib/pdfSplitter'
+import {
+  getImageExportLabel,
+  renderOutputImages,
+  type ImageExportFormat,
+} from './lib/imageExport'
 import {
   createEditedExportJob,
   createOutputJobs,
@@ -87,6 +93,7 @@ interface MergeSourcePdf extends MergeSourceDocument {
 
 type BusyState = 'idle' | 'loading' | 'splitting' | 'zipping' | 'merging'
 type WorkspaceMode = 'split' | 'merge'
+type ExportFormat = 'pdf' | ImageExportFormat
 
 interface PreviewContext {
   pages: OutputPageMeta[]
@@ -104,6 +111,12 @@ const modeOptions: Array<{ value: SplitMode; label: string; description: string 
 const workspaceOptions: Array<{ value: WorkspaceMode; label: string; description: string }> = [
   { value: 'split', label: '分割单个 PDF', description: '按页数或范围拆分一个文件' },
   { value: 'merge', label: '多 PDF 合并', description: '从多个文件选页后合并' },
+]
+
+const exportFormatOptions: Array<{ value: ExportFormat; label: string; description: string }> = [
+  { value: 'pdf', label: 'PDF', description: '保留可编辑文档' },
+  { value: 'jpeg', label: 'JPG', description: '适合分享预览' },
+  { value: 'png', label: 'PNG', description: '适合高清图片' },
 ]
 
 const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
@@ -166,6 +179,8 @@ function App() {
   const [busy, setBusy] = useState<BusyState>('idle')
   const [progress, setProgress] = useState({ current: 0, total: 0 })
   const [zipProgress, setZipProgress] = useState(0)
+  const [imageProgress, setImageProgress] = useState({ current: 0, total: 0 })
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('pdf')
   const [error, setError] = useState('')
   const [dragActive, setDragActive] = useState(false)
   const [mergeDragActive, setMergeDragActive] = useState(false)
@@ -241,6 +256,8 @@ function App() {
     setBusy('idle')
     setProgress({ current: 0, total: 0 })
     setZipProgress(0)
+    setImageProgress({ current: 0, total: 0 })
+    setExportFormat('pdf')
     setEditorExpanded(false)
     dispatchEdit({ type: 'initialize', pageCount: 0 })
     if (inputRef.current) inputRef.current.value = ''
@@ -700,24 +717,76 @@ function App() {
     }
   }
 
-  const handleZip = async () => {
+  const handleDownloadOutput = async (output: SplitOutput) => {
+    if (busy !== 'idle') return
+    if (exportFormat === 'pdf') {
+      downloadPdf(output)
+      return
+    }
+
+    setBusy('zipping')
+    setZipProgress(0)
+    setImageProgress({ current: 0, total: output.pageCount })
+    setError('')
+    closePagePreview()
+    try {
+      const imageFiles = await renderOutputImages(output, exportFormat, (current, total) => {
+        setImageProgress({ current, total })
+      })
+      if (imageFiles.length === 1) {
+        triggerDownload(imageFiles[0].blob, imageFiles[0].name)
+      } else {
+        const zip = await createFilesZip(
+          imageFiles.map((file) => ({ name: file.name, data: file.blob })),
+          setZipProgress,
+        )
+        triggerDownload(zip, `${output.name.replace(/\.pdf$/i, '')}_${getImageExportLabel(exportFormat).toLowerCase()}.zip`)
+      }
+    } catch (downloadError) {
+      setError(getErrorMessage(downloadError))
+    } finally {
+      setBusy('idle')
+      setZipProgress(0)
+      setImageProgress({ current: 0, total: 0 })
+    }
+  }
+
+  const handleDownloadAll = async () => {
     const activeOutputs = workspaceMode === 'merge' ? mergeOutputs : outputs
     if (activeOutputs.length === 0 || busy !== 'idle') return
     setBusy('zipping')
     setZipProgress(0)
+    setImageProgress({
+      current: 0,
+      total: exportFormat === 'pdf' ? 0 : activeOutputs.reduce((total, output) => total + output.pageCount, 0),
+    })
     setError('')
     closePagePreview()
     try {
-      const zip = await createZip(activeOutputs, setZipProgress)
+      const zip = exportFormat === 'pdf'
+        ? await createZip(activeOutputs, setZipProgress)
+        : await createFilesZip(
+          (await activeOutputs.reduce<Promise<{ files: Array<{ name: string; data: Blob }>; completedPages: number }>>(async (promise, output) => {
+            const accumulator = await promise
+            const previousCount = accumulator.completedPages
+            const rendered = await renderOutputImages(output, exportFormat, (current) => {
+              setImageProgress((latest) => ({ ...latest, current: previousCount + current }))
+            })
+            accumulator.files.push(...rendered.map((file) => ({ name: file.name, data: file.blob })))
+            return { files: accumulator.files, completedPages: previousCount + output.pageCount }
+          }, Promise.resolve({ files: [], completedPages: 0 }))).files,
+          setZipProgress,
+        )
       const zipName = workspaceMode === 'merge'
-        ? 'merged_selected.zip'
-        : `${getPdfBaseName(source?.file.name ?? 'PDF')}_split.zip`
+        ? `merged_selected_${exportFormat === 'pdf' ? 'pdf' : getImageExportLabel(exportFormat).toLowerCase()}.zip`
+        : `${getPdfBaseName(source?.file.name ?? 'PDF')}_split_${exportFormat === 'pdf' ? 'pdf' : getImageExportLabel(exportFormat).toLowerCase()}.zip`
       triggerDownload(zip, zipName)
     } catch (zipError) {
       setError(getErrorMessage(zipError))
     } finally {
       setBusy('idle')
       setZipProgress(0)
+      setImageProgress({ current: 0, total: 0 })
     }
   }
 
@@ -845,6 +914,13 @@ function App() {
   const mergeButtonLabel = busy === 'merging'
     ? `正在合并 ${progress.current}/${progress.total}`
     : `生成合并 PDF · ${mergeSelectedPages.length} 页`
+  const activeOutputPageCount = activeOutputs.reduce((total, output) => total + output.pageCount, 0)
+  const resultFormatLabel = exportFormat === 'pdf' ? 'PDF' : getImageExportLabel(exportFormat)
+  const downloadAllLabel = busy === 'zipping'
+    ? imageProgress.total > 0 && imageProgress.current < imageProgress.total
+      ? `正在生成图片 ${imageProgress.current}/${imageProgress.total}`
+      : `正在打包 ${Math.round(zipProgress)}%`
+    : `下载 ${resultFormatLabel}`
 
   return (
     <div className={ui.appShell}>
@@ -1292,12 +1368,32 @@ function App() {
             <div className="flex items-center justify-between gap-6 max-[540px]:flex-col max-[540px]:items-stretch">
               <div className={ui.sectionHeading}>
                 <span className="grid size-11 shrink-0 animate-success-pop place-items-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"><Check size={22} /></span>
-                <div><h2 className="mb-1 text-[17px] leading-tight font-semibold" id="results-title">{workspaceMode === 'merge' ? '合并完成' : '分割完成'}</h2><p className="text-xs text-muted">已生成 {activeOutputs.length} 个 PDF 文件</p></div>
+                <div><h2 className="mb-1 text-[17px] leading-tight font-semibold" id="results-title">{workspaceMode === 'merge' ? '合并完成' : '分割完成'}</h2><p className="text-xs text-muted">已生成 {activeOutputs.length} 个 PDF 文件 · 共 {activeOutputPageCount} 页</p></div>
               </div>
-              <button className={cx(ui.primaryButton, 'shrink-0 rounded-full bg-[linear-gradient(135deg,#1264e5,#3b82f6,#22d3ee)] px-6 shadow-lg shadow-blue-500/20 hover:bg-[linear-gradient(135deg,#0f55c7,#2563eb,#06b6d4)] max-[540px]:w-full')} type="button" onClick={handleZip} disabled={isBusy} title="把生成的 PDF 打包下载">
-                {busy === 'zipping' ? <RefreshCw className="animate-spin" size={18} /> : <Archive size={18} />}
-                {busy === 'zipping' ? `正在打包 ${Math.round(zipProgress)}%` : '下载新文件'}
-              </button>
+              <div className="flex shrink-0 items-center gap-2 max-[720px]:flex-wrap max-[540px]:w-full">
+                <div className="grid min-h-11 grid-cols-3 gap-1 rounded-lg bg-white/70 p-1 shadow-sm" role="group" aria-label="导出格式">
+                  {exportFormatOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cx(
+                        'min-w-14 rounded-md px-2 text-xs font-semibold text-muted transition-colors duration-200 hover:bg-white hover:text-brand disabled:opacity-50',
+                        exportFormat === option.value && 'bg-brand text-white shadow-sm hover:bg-brand hover:text-white',
+                      )}
+                      onClick={() => setExportFormat(option.value)}
+                      disabled={isBusy}
+                      aria-pressed={exportFormat === option.value}
+                      title={option.description}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <button className={cx(ui.primaryButton, 'shrink-0 rounded-full bg-[linear-gradient(135deg,#1264e5,#3b82f6,#22d3ee)] px-6 shadow-lg shadow-blue-500/20 hover:bg-[linear-gradient(135deg,#0f55c7,#2563eb,#06b6d4)] max-[540px]:flex-1')} type="button" onClick={() => void handleDownloadAll()} disabled={isBusy} title={exportFormat === 'pdf' ? '把生成的 PDF 打包下载' : `导出为 ${resultFormatLabel} 图片`}>
+                  {busy === 'zipping' ? <RefreshCw className="animate-spin" size={18} /> : exportFormat === 'pdf' ? <Archive size={18} /> : <FileImage size={18} />}
+                  {downloadAllLabel}
+                </button>
+              </div>
             </div>
             <div className="mt-5 border-t border-black/10">
               {activeOutputs.map((output, index) => {
@@ -1317,7 +1413,7 @@ function App() {
                       <button className="tooltip-button grid size-10 place-items-center rounded-lg border border-black/10 bg-white/65 text-muted transition-all duration-200 hover:bg-brand-soft hover:text-brand" type="button" onClick={() => void handleCopyOutput(output)} aria-label={`复制 ${output.name}`} title="复制 PDF"><Copy size={17} /></button>
                       <button className="tooltip-button grid size-10 place-items-center rounded-lg border border-black/10 bg-white/65 text-muted transition-all duration-200 hover:bg-brand-soft hover:text-brand" type="button" onClick={() => openOutputPreview(output)} aria-label={`预览 ${output.name}`} title="快速预览"><Eye size={18} /></button>
                     </div>
-                    <button className="tooltip-button inline-flex min-h-11 min-w-[88px] items-center justify-center gap-2 rounded-lg bg-brand-soft px-3 text-[13px] font-semibold text-brand transition-colors duration-200 hover:bg-blue-100" type="button" onClick={() => downloadPdf(output)} aria-label={`下载 ${output.name}`} title="下载 PDF">
+                    <button className="tooltip-button inline-flex min-h-11 min-w-[88px] items-center justify-center gap-2 rounded-lg bg-brand-soft px-3 text-[13px] font-semibold text-brand transition-colors duration-200 hover:bg-blue-100 disabled:opacity-50" type="button" onClick={() => void handleDownloadOutput(output)} disabled={isBusy} aria-label={`下载 ${output.name}`} title={exportFormat === 'pdf' ? '下载 PDF' : `下载 ${resultFormatLabel} 图片`}>
                       <Download size={17} /> <span>下载</span>
                     </button>
                     <button className="tooltip-button inline-flex min-h-11 min-w-[80px] items-center justify-center gap-2 rounded-lg bg-transparent px-2 text-[13px] font-semibold text-brand transition-colors duration-200 hover:bg-brand-soft" type="button" onClick={() => void handleShareOutput(output)} aria-label={`分享 ${output.name}`} title="分享 PDF">

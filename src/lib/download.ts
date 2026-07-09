@@ -3,6 +3,10 @@ import type { SplitOutput } from './pdfSplitter'
 
 export type CopyPdfResult = 'copied-file' | 'copied-name' | 'failed'
 export type SharePdfResult = 'shared' | 'cancelled' | 'unsupported' | 'failed'
+export interface DownloadFile {
+  name: string
+  data: Blob | Uint8Array
+}
 
 export function createPdfBlob(bytes: Uint8Array): Blob {
   return new Blob([bytes], { type: 'application/pdf' })
@@ -72,8 +76,18 @@ export async function createZip(
   outputs: SplitOutput[],
   onProgress?: (percent: number) => void,
 ): Promise<Blob> {
+  return createFilesZip(
+    outputs.map((output) => ({ name: output.name, data: output.bytes })),
+    onProgress,
+  )
+}
+
+export async function createFilesZip(
+  files: DownloadFile[],
+  onProgress?: (percent: number) => void,
+): Promise<Blob> {
   const zip = new JSZip()
-  outputs.forEach((output) => zip.file(output.name, output.bytes))
+  files.forEach((file) => zip.file(file.name, file.data))
   return zip.generateAsync(
     { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
     (metadata) => onProgress?.(metadata.percent),
