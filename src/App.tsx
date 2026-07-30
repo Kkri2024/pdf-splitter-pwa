@@ -517,8 +517,6 @@ function App() {
   const processFile = useCallback(async (file?: File) => {
     if (!file || busy !== 'idle') return
     setError('')
-    setOutputs([])
-    setEditorExpanded(false)
 
     const looksLikePdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
     if (!looksLikePdf) {
@@ -530,8 +528,6 @@ function App() {
       return
     }
 
-    cleanupPreview()
-    setSource(null)
     setBusy('loading')
     const generation = generationRef.current
 
@@ -543,7 +539,10 @@ function App() {
         return
       }
 
+      cleanupPreview()
       previewDocumentRef.current = loaded.document
+      setOutputs([])
+      setEditorExpanded(false)
       setSource({ file, bytes, pageCount: loaded.pageCount })
       const initialEnd = Math.min(loaded.pageCount, 3)
       setRangeSpec(`1-${initialEnd}`)
@@ -551,13 +550,17 @@ function App() {
       setBusy('idle')
     } catch (loadError) {
       if (generation === generationRef.current) {
-        cleanupPreview()
         setBusy('idle')
-        setSource(null)
         setError(getErrorMessage(loadError))
       }
     }
   }, [busy, cleanupPreview])
+
+  const openSplitFilePicker = useCallback(() => {
+    if (!inputRef.current || busy !== 'idle') return
+    inputRef.current.value = ''
+    inputRef.current.click()
+  }, [busy])
 
   const processMergeFiles = useCallback(async (fileList?: FileList | File[]) => {
     const files = Array.from(fileList ?? [])
@@ -1076,6 +1079,18 @@ function App() {
       </header>
 
       <main className={cx(ui.workspace, ((workspaceMode === 'split' && source) || (workspaceMode === 'merge' && mergeSources.length > 0)) && 'max-[899px]:pb-28')} data-app-content>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="application/pdf,.pdf"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0]
+            event.currentTarget.value = ''
+            void processFile(file)
+          }}
+          className="pointer-events-none absolute size-px opacity-0"
+          aria-label="选择 PDF 文件"
+        />
         {workspaceMode === 'split' && (!source ? (
           <section
             className={cx(
@@ -1094,14 +1109,6 @@ function App() {
               void processFile(event.dataTransfer.files[0])
             }}
           >
-            <input
-              ref={inputRef}
-              type="file"
-              accept="application/pdf,.pdf"
-              onChange={(event) => void processFile(event.target.files?.[0])}
-              className="pointer-events-none absolute size-px opacity-0"
-              aria-label="选择 PDF 文件"
-            />
             <div className={cx('relative z-10 flex flex-col items-center transition-[transform,opacity] duration-200 ease-out', (dragActive || busy === 'loading') && 'pointer-events-none scale-95 opacity-0')}>
               <span className="mb-5 grid size-16 place-items-center rounded-[18px] border border-brand/15 bg-brand-soft text-brand shadow-[0_10px_22px_rgba(14,116,144,.11)]" aria-hidden="true">
                 <Upload size={28} />
@@ -1110,7 +1117,7 @@ function App() {
                 <h2 className="mb-2 text-[21px] leading-tight font-semibold">拖放 PDF 到这里</h2>
                 <p className="mb-6 text-sm leading-relaxed text-muted">或从 Mac、iCloud 云盘及“文件”中选择</p>
               </div>
-              <button className={ui.primaryButton} type="button" disabled={isBusy} onClick={() => inputRef.current?.click()}>
+              <button className={ui.primaryButton} type="button" disabled={isBusy} onClick={openSplitFilePicker}>
                 <FileText size={18} /> 选择 PDF
               </button>
             </div>
@@ -1136,7 +1143,7 @@ function App() {
                   </div>
                 </div>
                 <div className="mt-4 grid gap-2 border-t border-black/8 pt-4 max-[1239px]:mt-0 max-[1239px]:ml-4 max-[1239px]:inline-grid max-[1239px]:grid-cols-2 max-[1239px]:border-t-0 max-[1239px]:border-l max-[1239px]:pl-4">
-                  <button className={ui.secondaryButton} type="button" onClick={() => inputRef.current?.click()} disabled={isBusy} title="替换当前 PDF"><RefreshCw size={16} /> 替换</button>
+                  <button className={ui.secondaryButton} type="button" onClick={openSplitFilePicker} disabled={isBusy} title="替换当前 PDF"><RefreshCw size={16} /> 替换</button>
                   <button className={cx(ui.secondaryButton, 'hover:border-danger/20 hover:bg-danger-soft hover:text-danger')} type="button" onClick={clearAll} disabled={isBusy} title="移除当前 PDF"><Trash2 size={16} /> 移除</button>
                 </div>
                 {(source.pageCount > 500 || source.file.size > 100 * 1024 * 1024) && (

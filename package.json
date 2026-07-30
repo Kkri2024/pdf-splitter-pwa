@@ -4,7 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "prepare:pdfjs-assets": "node scripts/sync-pdfjs-assets.mjs",
+    "predev": "npm run prepare:pdfjs-assets",
     "dev": "vite",
+    "prebuild": "npm run prepare:pdfjs-assets",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "deploy:cloudflare": "npm run build && wrangler pages deploy dist --project-name pdf-splitter-tool",

@@ -17,9 +17,41 @@ export interface Thumbnail {
 
 export type PagePreview = Thumbnail
 
+function getPdfAssetUrl(directory: 'cmaps' | 'standard_fonts'): string {
+  return new URL(`./pdfjs/${directory}/`, window.document.baseURI).href
+}
+
+function getPdfPreviewError(error: unknown, fallback: string): Error {
+  const message = error instanceof Error ? error.message : String(error)
+  const normalized = message.toLowerCase()
+  if (
+    normalized.includes('cmap')
+    || normalized.includes('standard font')
+    || normalized.includes('failed to fetch')
+    || normalized.includes('networkerror')
+  ) {
+    return new Error('预览字体资源加载失败，请刷新后重试')
+  }
+  return error instanceof Error ? error : new Error(fallback)
+}
+
+async function waitForRender(renderPromise: Promise<void>): Promise<void> {
+  try {
+    await renderPromise
+  } catch (error) {
+    throw getPdfPreviewError(error, '当前浏览器无法生成页面预览')
+  }
+}
+
 export async function loadPdfForPreview(bytes: Uint8Array): Promise<LoadedPdf> {
   try {
-    const document = await getDocument({ data: bytes.slice() }).promise
+    const document = await getDocument({
+      data: bytes.slice(),
+      cMapUrl: getPdfAssetUrl('cmaps'),
+      cMapPacked: true,
+      standardFontDataUrl: getPdfAssetUrl('standard_fonts'),
+      useSystemFonts: true,
+    }).promise
     return { document, pageCount: document.numPages }
   } catch (error) {
     const name = error instanceof Error ? error.name : ''
@@ -27,6 +59,8 @@ export async function loadPdfForPreview(bytes: Uint8Array): Promise<LoadedPdf> {
     if (name === 'PasswordException' || message.includes('password')) {
       throw new Error('暂不支持密码保护或加密的 PDF')
     }
+    const previewError = getPdfPreviewError(error, '无法读取此 PDF，文件可能已损坏')
+    if (previewError !== error) throw previewError
     throw new Error('无法读取此 PDF，文件可能已损坏')
   }
 }
@@ -53,11 +87,11 @@ export async function renderThumbnails(
     canvas.style.width = `${viewport.width}px`
     canvas.style.height = `${viewport.height}px`
 
-    await page.render({
+    await waitForRender(page.render({
       canvasContext: context,
       viewport,
       transform: pixelRatio === 1 ? undefined : [pixelRatio, 0, 0, pixelRatio, 0, 0],
-    }).promise
+    }).promise)
 
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.84))
     page.cleanup()
@@ -91,11 +125,11 @@ export async function renderThumbnail(
   const pixelRatio = Math.min(window.devicePixelRatio || 1, pixelRatioLimit)
   canvas.width = Math.ceil(viewport.width * pixelRatio)
   canvas.height = Math.ceil(viewport.height * pixelRatio)
-  await page.render({
+  await waitForRender(page.render({
     canvasContext: context,
     viewport,
     transform: pixelRatio === 1 ? undefined : [pixelRatio, 0, 0, pixelRatio, 0, 0],
-  }).promise
+  }).promise)
   if (isCancelled()) {
     page.cleanup()
     canvas.width = 0
@@ -136,11 +170,11 @@ export async function renderPagePreview(
   canvas.width = Math.ceil(viewport.width * pixelRatio)
   canvas.height = Math.ceil(viewport.height * pixelRatio)
 
-  await page.render({
+  await waitForRender(page.render({
     canvasContext: context,
     viewport,
     transform: pixelRatio === 1 ? undefined : [pixelRatio, 0, 0, pixelRatio, 0, 0],
-  }).promise
+  }).promise)
 
   if (isCancelled()) {
     page.cleanup()
