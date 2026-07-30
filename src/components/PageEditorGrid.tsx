@@ -28,6 +28,7 @@ interface PageEditorGridProps {
   disabled: boolean
   editing: boolean
   showSelection: boolean
+  mobileCompact?: boolean
   onToggle: (id: string) => void
   onMove: (activeId: string, overId: string) => void
   onMoveTo: (id: string, position: number) => void
@@ -88,21 +89,21 @@ function SortablePage({
   return (
     <article
       ref={setNodeRef}
-      className={`group/page relative min-w-0 overflow-visible rounded-lg border bg-white/85 shadow-[0_7px_20px_rgba(73,137,214,.08)] transition-all duration-200 ${showSelection && selected ? 'border-2 border-brand ring-4 ring-brand/15 shadow-[0_9px_26px_rgba(40,120,232,.18)]' : 'border-[#e0e0e0]'} ${isDragging || menuOpen ? 'z-20 shadow-2xl' : ''}`}
+      className={`group/page relative min-w-0 overflow-visible rounded-[14px] border bg-white shadow-[0_6px_18px_rgba(23,24,26,.07)] transition-[transform,border-color,box-shadow] duration-150 ${showSelection && selected ? 'border-2 border-brand ring-4 ring-cyan-500/10 shadow-[0_12px_28px_rgba(14,116,144,.16)]' : 'border-black/10'} ${isDragging || menuOpen ? 'z-20 shadow-raised' : ''}`}
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
-      <button type="button" className="block w-full cursor-zoom-in overflow-hidden rounded-t-lg border-0 bg-transparent p-0" onClick={() => onOpen(page.id)} aria-label={`全屏查看当前第 ${index + 1} 页`}>
+      <button type="button" className="block w-full cursor-zoom-in overflow-hidden rounded-t-[13px] border-0 bg-transparent p-0" onClick={() => onOpen(page.id)} aria-label={`全屏查看当前第 ${index + 1} 页`}>
         {thumbnail ? (
           <img className="block h-auto w-full bg-white object-contain" style={{ aspectRatio: `${thumbnail.width} / ${thumbnail.height}` }} src={thumbnail.url} alt={`当前第 ${index + 1} 页预览`} />
         ) : (
           <span className="grid aspect-[.71] w-full place-items-center bg-slate-100 text-xs text-faint">准备预览...</span>
         )}
       </button>
-      <footer className={`relative flex min-h-12 items-center gap-2 rounded-b-lg border-t px-2.5 ${showSelection && selected ? 'border-brand/15 bg-brand-soft/55' : 'border-[#e0e0e0] bg-slate-50/90'}`}>
+      <footer className={`relative flex min-h-12 items-center gap-2 rounded-b-[13px] border-t px-2.5 ${showSelection && selected ? 'border-brand/15 bg-brand-soft' : 'border-black/10 bg-[#f8fafb]'}`}>
         {showSelection && (
           <button
             type="button"
-            className={`tooltip-button grid size-10 shrink-0 place-items-center rounded-lg border transition-colors ${selected ? 'border-brand bg-brand text-white' : 'border-black/15 bg-white text-transparent hover:border-brand/40'}`}
+            className={`tooltip-button grid size-10 shrink-0 place-items-center rounded-[10px] border transition-[transform,background-color,border-color,color] duration-150 active:scale-[.96] ${selected ? 'border-brand bg-brand text-white' : 'border-black/15 bg-white text-transparent hover:border-brand/45'}`}
             onClick={() => onToggle(page.id)}
             aria-label={`${selected ? '取消选择' : '选择'}当前第 ${index + 1} 页`}
             title={selected ? '取消选中' : '选中本页'}
@@ -119,7 +120,7 @@ function SortablePage({
           <>
             <button
             type="button"
-            className="tooltip-button grid size-10 shrink-0 cursor-grab touch-manipulation place-items-center rounded-lg border border-black/10 bg-white text-muted shadow-sm active:cursor-grabbing"
+            className="tooltip-button grid size-10 shrink-0 cursor-grab touch-manipulation place-items-center rounded-[10px] border border-black/10 bg-white text-muted shadow-sm transition-[transform,background-color,color] duration-150 hover:bg-brand-soft hover:text-brand active:scale-[.96] active:cursor-grabbing"
             aria-label={`拖动当前第 ${index + 1} 页排序`}
             title="拖动排序"
             {...attributes}
@@ -128,9 +129,9 @@ function SortablePage({
             <GripVertical size={18} />
           </button>
             <div ref={menuRef} className="relative">
-              <button type="button" className="tooltip-button grid size-10 place-items-center rounded-lg text-muted hover:bg-white hover:text-ink" onClick={() => setMenuOpen((open) => !open)} aria-label={`第 ${index + 1} 页更多操作`} title="更多操作" aria-expanded={menuOpen}><MoreHorizontal size={19} /></button>
+              <button type="button" className="tooltip-button grid size-10 place-items-center rounded-[10px] text-muted transition-[transform,background-color,color] duration-150 hover:bg-brand-soft hover:text-brand active:scale-[.96]" onClick={() => setMenuOpen((open) => !open)} aria-label={`第 ${index + 1} 页更多操作`} title="更多操作" aria-expanded={menuOpen}><MoreHorizontal size={19} /></button>
               {menuOpen && (
-                <div className="absolute right-0 bottom-12 z-30 w-[190px] rounded-lg border border-black/10 bg-white p-3 shadow-2xl max-[540px]:w-[150px]">
+                <div className="absolute right-0 bottom-12 z-30 w-[190px] rounded-[14px] border border-black/10 bg-white/96 p-3 shadow-raised backdrop-blur-xl max-[540px]:w-[150px]">
                   <label className="block text-xs font-semibold text-ink">
                     移动到指定页
                     <span className="mt-2 flex items-center gap-2">
@@ -162,7 +163,7 @@ export function PageEditorGrid(props: PageEditorGridProps) {
   useEffect(() => {
     const element = scrollRef.current
     if (!element) return
-    const observer = new ResizeObserver(([entry]) => setColumns(entry.contentRect.width < 330 ? 1 : 2))
+    const observer = new ResizeObserver(([entry]) => setColumns(entry.contentRect.width < 220 ? 1 : 2))
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
@@ -176,14 +177,17 @@ export function PageEditorGrid(props: PageEditorGridProps) {
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={props.pages.map((page) => page.id)} strategy={rectSortingStrategy}>
-        <div ref={scrollRef} className="mt-5 h-[520px] overflow-y-auto px-1.5 [scrollbar-color:rgba(92,102,117,.35)_transparent] [scrollbar-width:thin] max-[900px]:h-[560px] max-[540px]:h-[500px]">
+        <div
+          ref={scrollRef}
+          className={`mt-5 h-[520px] overflow-y-auto overscroll-contain px-1.5 [scrollbar-color:rgba(14,116,144,.32)_transparent] [scrollbar-width:thin] max-[900px]:h-[560px] ${props.mobileCompact ? 'max-[540px]:h-[min(52vh,420px)]' : 'max-[540px]:h-[500px]'}`}
+        >
           <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
             {virtualizer.getVirtualItems().map((virtualRow) => (
               <div
                 ref={virtualizer.measureElement}
                 data-index={virtualRow.index}
                 key={virtualRow.key}
-                className="absolute top-0 left-0 grid w-full grid-cols-2 items-start gap-5 pb-5 max-[540px]:gap-4 max-[540px]:pb-4 max-[330px]:grid-cols-1"
+                className="absolute top-0 left-0 grid w-full grid-cols-2 items-start gap-5 pb-5 max-[540px]:gap-4 max-[540px]:pb-4 max-[260px]:grid-cols-1"
                 style={{ transform: `translateY(${virtualRow.start}px)` }}
               >
                 {rows[virtualRow.index].map((page) => (

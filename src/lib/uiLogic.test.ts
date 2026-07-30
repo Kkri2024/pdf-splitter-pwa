@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { createPreviewGroups, getAdjacentPreviewPage, isRemainderOutput } from './uiLogic'
+import {
+  createPreviewGroups,
+  getAdjacentPreviewPage,
+  getBulkDownloadLabel,
+  getWorkspaceIntro,
+  isRemainderOutput,
+  shouldDownloadOutputDirectly,
+} from './uiLogic'
 import type { SplitOutput } from './pdfSplitter'
 
 const thumbnails = Array.from({ length: 12 }, (_, index) => ({
@@ -66,6 +73,29 @@ describe('result presentation', () => {
     expect(isRemainderOutput(outputs, 1, 'fixed', 5)).toBe(false)
     expect(isRemainderOutput([output(2)], 0, 'fixed', 5)).toBe(false)
     expect(isRemainderOutput(outputs, 2, 'custom', 5)).toBe(false)
+  })
+
+  it('keeps the visible bulk-download label aligned with the delivered file type', () => {
+    expect(getBulkDownloadLabel('pdf', 1, 8)).toBe('下载 PDF')
+    expect(getBulkDownloadLabel('pdf', 3, 8)).toBe('下载全部 PDF（ZIP）')
+    expect(getBulkDownloadLabel('jpeg', 1, 1)).toBe('下载 JPG')
+    expect(getBulkDownloadLabel('jpeg', 1, 3)).toBe('下载 JPG（ZIP）')
+    expect(getBulkDownloadLabel('png', 2, 8)).toBe('导出全部 PNG（ZIP）')
+    expect(shouldDownloadOutputDirectly(1)).toBe(true)
+    expect(shouldDownloadOutputDirectly(2)).toBe(false)
+  })
+})
+
+describe('workspace copy', () => {
+  it('describes the active split or merge task', () => {
+    expect(getWorkspaceIntro('split')).toEqual({
+      title: '拆分 PDF，清楚又利落',
+      description: '选择一个文件，按固定页数、逐页或自定义范围生成新的 PDF。',
+    })
+    expect(getWorkspaceIntro('merge')).toEqual({
+      title: '合并 PDF，顺序清清楚楚',
+      description: '添加多个文件，选取页面并调整顺序，生成一份新的 PDF。',
+    })
   })
 })
 
