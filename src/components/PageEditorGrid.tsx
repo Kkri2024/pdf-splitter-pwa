@@ -23,6 +23,9 @@ import type { Thumbnail } from '../lib/pdfPreview'
 
 interface PageEditorGridProps {
   pages: EditablePage[]
+  pagePositions?: Record<string, number>
+  totalPageCount?: number
+  viewKey?: string
   selectedIds: string[]
   thumbnails: Record<string, Thumbnail>
   disabled: boolean
@@ -168,6 +171,10 @@ export function PageEditorGrid(props: PageEditorGridProps) {
     return () => observer.disconnect()
   }, [])
 
+  useEffect(() => {
+    if (props.viewKey !== undefined && scrollRef.current) scrollRef.current.scrollTop = 0
+  }, [props.viewKey])
+
   const handleDragEnd = (event: DragEndEvent) => {
     const activeId = String(event.active.id)
     const overId = event.over ? String(event.over.id) : ''
@@ -191,7 +198,13 @@ export function PageEditorGrid(props: PageEditorGridProps) {
                 style={{ transform: `translateY(${virtualRow.start}px)` }}
               >
                 {rows[virtualRow.index].map((page) => (
-                  <SortablePage key={page.id} {...props} page={page} index={props.pages.findIndex((item) => item.id === page.id)} pageCount={props.pages.length} />
+                  <SortablePage
+                    key={page.id}
+                    {...props}
+                    page={page}
+                    index={(props.pagePositions?.[page.id] ?? props.pages.findIndex((item) => item.id === page.id) + 1) - 1}
+                    pageCount={props.totalPageCount ?? props.pages.length}
+                  />
                 ))}
               </div>
             ))}

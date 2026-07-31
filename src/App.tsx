@@ -197,6 +197,7 @@ function App() {
   const [confirmClearHistory, setConfirmClearHistory] = useState(false)
   const [mobileSplitSettingsOpen, setMobileSplitSettingsOpen] = useState(false)
   const [mobileMergeOrderOpen, setMobileMergeOrderOpen] = useState(false)
+  const [activePlanJobIndex, setActivePlanJobIndex] = useState<number | null>(null)
   const [previewContext, setPreviewContext] = useState<PreviewContext | null>(null)
   const [previewImage, setPreviewImage] = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -697,6 +698,20 @@ function App() {
       return { plan: [], error: getErrorMessage(planError) }
     }
   }, [editState.present.pages, mode, pagesPerFile, rangeSpec, selectionOutputMode, source])
+
+  useEffect(() => {
+    setActivePlanJobIndex(null)
+  }, [editState.present.pages, mode, pagesPerFile, rangeSpec, selectionOutputMode, source])
+
+  const visibleSplitPages = useMemo(() => {
+    if (activePlanJobIndex === null) return editState.present.pages
+    return planResult.plan[activePlanJobIndex]?.pages ?? editState.present.pages
+  }, [activePlanJobIndex, editState.present.pages, planResult.plan])
+
+  const splitPagePositions = useMemo(
+    () => Object.fromEntries(editState.present.pages.map((page, index) => [page.id, index + 1])),
+    [editState.present.pages],
+  )
 
   const chunkSize = Number(pagesPerFile)
 
@@ -1274,7 +1289,15 @@ function App() {
                 <div className="flex items-center justify-between gap-3">
                   <div className={ui.sectionHeading}>
                     <span className="grid size-[34px] shrink-0 place-items-center rounded-[11px] bg-brand-soft text-brand"><Layers3 size={17} /></span>
-                    <div><h2 className="text-[17px] leading-tight font-semibold" id="preview-title">文档画布</h2><p className="mt-1 text-xs text-muted">{editState.present.pages.length} 页{editState.present.selectedIds.length > 0 ? ` · 已选 ${editState.present.selectedIds.length}` : ''}</p></div>
+                    <div>
+                      <h2 className="text-[17px] leading-tight font-semibold" id="preview-title">文档画布</h2>
+                      <p className="mt-1 text-xs text-muted" aria-live="polite">
+                        {activePlanJobIndex === null
+                          ? `${editState.present.pages.length} 页`
+                          : `显示 ${visibleSplitPages.length} / ${editState.present.pages.length} 页`}
+                        {editState.present.selectedIds.length > 0 ? ` · 已选 ${editState.present.selectedIds.length}` : ''}
+                      </p>
+                    </div>
                   </div>
                   <button className={cx('tooltip-button relative grid size-11 place-items-center rounded-lg border transition-colors', editorExpanded ? 'border-brand/20 bg-brand-soft text-brand' : 'border-black/10 bg-white/60 text-muted hover:text-brand')} type="button" onClick={() => setEditorExpanded((expanded) => !expanded)} aria-expanded={editorExpanded} aria-label={editorExpanded ? '收起页面编辑工具' : '展开页面编辑工具'} title={editorExpanded ? '收起编辑' : '编辑页面'}>
                     <Settings2 size={19} />
@@ -1294,18 +1317,46 @@ function App() {
                   <button className="tooltip-button grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'restore' })} disabled={isBusy} aria-label="恢复原始页面" title="恢复原始"><ListRestart size={18} /></button>
                 </div>}
                 {!planResult.error && planResult.plan.length > 0 && (
-                  <div className="mt-4 flex gap-2 overflow-x-auto rounded-[14px] border border-brand/10 bg-brand-soft/55 p-2 [scrollbar-width:thin]" aria-label={`预计生成 ${planResult.plan.length} 份`}>
-                    {planResult.plan.slice(0, 8).map((job, index) => (
-                      <span className="flex min-h-9 shrink-0 items-center gap-2 rounded-[10px] border border-white bg-white/80 px-3 text-xs text-muted shadow-sm" key={`${job.name}-${index}`}>
-                        <b className="text-sm text-brand tabular-nums">{String(index + 1).padStart(2, '0')}</b>
+                  <div className="mt-4 flex gap-2 overflow-x-auto rounded-[14px] border border-brand/10 bg-brand-soft/55 p-2 [scrollbar-width:thin]" aria-label={`按预计生成的 ${planResult.plan.length} 份筛选画布`}>
+                    <button
+                      type="button"
+                      className={cx(
+                        'flex min-h-10 shrink-0 items-center gap-2 rounded-[10px] border px-3 text-xs font-semibold shadow-sm transition-[transform,background-color,border-color,color,box-shadow] duration-150 active:scale-[.96]',
+                        activePlanJobIndex === null
+                          ? 'border-brand bg-brand text-white shadow-[0_7px_16px_rgba(14,116,144,.2)]'
+                          : 'border-white bg-white/80 text-muted hover:border-brand/25 hover:text-brand',
+                      )}
+                      onClick={() => setActivePlanJobIndex(null)}
+                      aria-pressed={activePlanJobIndex === null}
+                    >
+                      全部
+                      <span className={activePlanJobIndex === null ? 'text-white/75' : 'text-faint'}>{editState.present.pages.length} 页</span>
+                    </button>
+                    {planResult.plan.map((job, index) => (
+                      <button
+                        type="button"
+                        className={cx(
+                          'flex min-h-10 shrink-0 items-center gap-2 rounded-[10px] border px-3 text-xs shadow-sm transition-[transform,background-color,border-color,color,box-shadow] duration-150 active:scale-[.96]',
+                          activePlanJobIndex === index
+                            ? 'border-brand bg-brand text-white shadow-[0_7px_16px_rgba(14,116,144,.2)]'
+                            : 'border-white bg-white/80 text-muted hover:border-brand/25 hover:text-brand',
+                        )}
+                        key={`${job.name}-${index}`}
+                        onClick={() => setActivePlanJobIndex((current) => current === index ? null : index)}
+                        aria-pressed={activePlanJobIndex === index}
+                        aria-label={`只显示第 ${index + 1} 份，${job.range ? `第 ${job.range.start} 至 ${job.range.end} 页` : `共 ${job.pages.length} 页`}`}
+                      >
+                        <b className={cx('text-sm tabular-nums', activePlanJobIndex === index ? 'text-white' : 'text-brand')}>{String(index + 1).padStart(2, '0')}</b>
                         {job.range ? `第 ${job.range.start}${job.range.end !== job.range.start ? `–${job.range.end}` : ''} 页` : `${job.pages.length} 页`}
-                      </span>
+                      </button>
                     ))}
-                    {planResult.plan.length > 8 && <span className="flex min-h-9 shrink-0 items-center px-2 text-xs font-semibold text-brand">另有 {planResult.plan.length - 8} 组</span>}
                   </div>
                 )}
                 <PageEditorGrid
-                  pages={editState.present.pages}
+                  pages={visibleSplitPages}
+                  pagePositions={splitPagePositions}
+                  totalPageCount={editState.present.pages.length}
+                  viewKey={activePlanJobIndex === null ? 'all' : `plan-${activePlanJobIndex}`}
                   selectedIds={editState.present.selectedIds}
                   thumbnails={thumbnails}
                   disabled={isBusy}
