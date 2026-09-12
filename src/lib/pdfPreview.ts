@@ -44,16 +44,18 @@ async function waitForRender(renderPromise: Promise<void>): Promise<void> {
 }
 
 export async function loadPdfForPreview(bytes: Uint8Array): Promise<LoadedPdf> {
-  try {
-    const document = await getDocument({
+  const loadingTask = getDocument({
       data: bytes.slice(),
       cMapUrl: getPdfAssetUrl('cmaps'),
       cMapPacked: true,
       standardFontDataUrl: getPdfAssetUrl('standard_fonts'),
       useSystemFonts: true,
-    }).promise
+    })
+  try {
+    const document = await loadingTask.promise
     return { document, pageCount: document.numPages }
   } catch (error) {
+    await loadingTask.destroy?.().catch(() => undefined)
     const name = error instanceof Error ? error.name : ''
     const message = error instanceof Error ? error.message.toLowerCase() : ''
     if (name === 'PasswordException' || message.includes('password')) {

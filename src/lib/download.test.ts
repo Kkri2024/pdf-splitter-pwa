@@ -21,19 +21,19 @@ describe('copyPdfToClipboard', () => {
     expect(clipboard.write).toHaveBeenCalledOnce()
   })
 
-  it('falls back to the file name when PDF MIME is rejected', async () => {
+  it('reports PDF copy failure without silently copying the name', async () => {
     const clipboard = {
       write: vi.fn().mockRejectedValue(new Error('unsupported MIME')),
       writeText: vi.fn().mockResolvedValue(undefined),
     } as unknown as Clipboard
     await expect(copyPdfToClipboard(output, clipboard, TestClipboardItem as unknown as typeof ClipboardItem))
-      .resolves.toBe('copied-name')
-    expect(clipboard.writeText).toHaveBeenCalledWith(output.name)
+      .resolves.toBe('failed')
+    expect(clipboard.writeText).not.toHaveBeenCalled()
   })
 
-  it('uses text fallback when ClipboardItem is unavailable', async () => {
+  it('does not write text when ClipboardItem is unavailable', async () => {
     const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) } as unknown as Clipboard
-    await expect(copyPdfToClipboard(output, clipboard, undefined)).resolves.toBe('copied-name')
+    await expect(copyPdfToClipboard(output, clipboard, undefined)).resolves.toBe('failed')
   })
 
   it('reports failure when both clipboard paths fail', async () => {

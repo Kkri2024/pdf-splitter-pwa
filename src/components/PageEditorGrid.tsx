@@ -18,7 +18,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Check, GripVertical, MoreHorizontal, MoveRight } from 'lucide-react'
-import type { EditablePage } from '../lib/pageEditor'
+import type { OutputPageMeta as EditablePage } from '../lib/pdfSplitter'
 import type { Thumbnail } from '../lib/pdfPreview'
 
 interface PageEditorGridProps {
@@ -31,7 +31,9 @@ interface PageEditorGridProps {
   disabled: boolean
   editing: boolean
   showSelection: boolean
-  mobileCompact?: boolean
+  thumbnailSize?: 'small' | 'medium' | 'large'
+  showSourceLabel?: boolean
+  scrollClassName?: string
   onToggle: (id: string) => void
   onMove: (activeId: string, overId: string) => void
   onMoveTo: (id: string, position: number) => void
@@ -58,13 +60,14 @@ function SortablePage({
   onMoveTo,
   onOpen,
   onRequestThumbnail,
+  showSourceLabel,
 }: SortablePageProps) {
   const thumbnail = thumbnails[page.id]
   const selected = selectedIds.includes(page.id)
   const [position, setPosition] = useState(String(index + 1))
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: page.id, disabled })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: page.id, disabled: disabled || !editing })
 
   useEffect(() => setPosition(String(index + 1)), [index])
   useEffect(() => { onRequestThumbnail(page) }, [onRequestThumbnail, page, thumbnail])
@@ -97,16 +100,17 @@ function SortablePage({
     >
       <button type="button" className="block w-full cursor-zoom-in overflow-hidden rounded-t-[13px] border-0 bg-transparent p-0" onClick={() => onOpen(page.id)} aria-label={`全屏查看当前第 ${index + 1} 页`}>
         {thumbnail ? (
-          <img className="block h-auto w-full bg-white object-contain" style={{ aspectRatio: `${thumbnail.width} / ${thumbnail.height}` }} src={thumbnail.url} alt={`当前第 ${index + 1} 页预览`} />
+          <img className="block h-auto w-full bg-white object-contain" width={thumbnail.width} height={thumbnail.height} style={{ aspectRatio: `${thumbnail.width} / ${thumbnail.height}` }} src={thumbnail.url} alt={`当前第 ${index + 1} 页预览`} />
         ) : (
-          <span className="grid aspect-[.71] w-full place-items-center bg-slate-100 text-xs text-faint">准备预览...</span>
+          <span className="grid aspect-[.71] w-full place-items-center bg-slate-100 text-xs text-faint">准备预览…</span>
         )}
       </button>
-      <footer className={`relative flex min-h-12 items-center gap-2 rounded-b-[13px] border-t px-2.5 ${showSelection && selected ? 'border-brand/15 bg-brand-soft' : 'border-black/10 bg-[#f8fafb]'}`}>
+      <footer className={`relative flex min-h-12 flex-wrap items-center gap-1 rounded-b-[13px] border-t px-2.5 ${showSelection && selected ? 'border-brand/15 bg-brand-soft' : 'border-black/10 bg-[#f8fafb]'}`}>
         {showSelection && (
           <button
             type="button"
             className={`tooltip-button grid size-10 shrink-0 place-items-center rounded-[10px] border transition-[transform,background-color,border-color,color] duration-150 active:scale-[.96] ${selected ? 'border-brand bg-brand text-white' : 'border-black/15 bg-white text-transparent hover:border-brand/45'}`}
+            disabled={disabled}
             onClick={() => onToggle(page.id)}
             aria-label={`${selected ? '取消选择' : '选择'}当前第 ${index + 1} 页`}
             title={selected ? '取消选中' : '选中本页'}
@@ -115,12 +119,13 @@ function SortablePage({
             <Check size={17} />
           </button>
         )}
-        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
+        <span className="min-w-0 flex-1 text-xs font-semibold text-ink">
           第 {index + 1} 页
-          {(index !== page.sourcePageIndex || page.rotation !== 0) && <small className="ml-1.5 font-normal text-muted">原 {page.sourcePageIndex + 1}{page.rotation ? ` · ${page.rotation}°` : ''}</small>}
+          {(!showSourceLabel && index !== page.sourcePageIndex || page.rotation !== 0) && <small className="ml-1.5 font-normal text-muted">原 {page.sourcePageIndex + 1}{page.rotation ? ` · ${page.rotation}°` : ''}</small>}
         </span>
+        {showSourceLabel && <span className="order-first w-full truncate py-1 text-[11px] text-muted" title={`${page.sourceName ?? ''} · 原第 ${page.sourcePageIndex + 1} 页`}>{page.sourceName} · 原第 {page.sourcePageIndex + 1} 页</span>}
         {editing && (
-          <>
+          <div className="flex w-full items-center justify-end gap-1 border-t border-black/5 py-1">
             <button
             type="button"
             className="tooltip-button grid size-10 shrink-0 cursor-grab touch-manipulation place-items-center rounded-[10px] border border-black/10 bg-white text-muted shadow-sm transition-[transform,background-color,color] duration-150 hover:bg-brand-soft hover:text-brand active:scale-[.96] active:cursor-grabbing"
@@ -132,20 +137,20 @@ function SortablePage({
             <GripVertical size={18} />
           </button>
             <div ref={menuRef} className="relative">
-              <button type="button" className="tooltip-button grid size-10 place-items-center rounded-[10px] text-muted transition-[transform,background-color,color] duration-150 hover:bg-brand-soft hover:text-brand active:scale-[.96]" onClick={() => setMenuOpen((open) => !open)} aria-label={`第 ${index + 1} 页更多操作`} title="更多操作" aria-expanded={menuOpen}><MoreHorizontal size={19} /></button>
+              <button type="button" className="tooltip-button grid size-10 place-items-center rounded-[10px] text-muted transition-[transform,background-color,color] duration-150 hover:bg-brand-soft hover:text-brand active:scale-[.96]" disabled={disabled} onClick={() => setMenuOpen((open) => !open)} aria-label={`第 ${index + 1} 页更多操作`} title="更多操作" aria-expanded={menuOpen}><MoreHorizontal size={19} /></button>
               {menuOpen && (
                 <div className="absolute right-0 bottom-12 z-30 w-[190px] rounded-[14px] border border-black/10 bg-white/96 p-3 shadow-raised backdrop-blur-xl max-[540px]:w-[150px]">
                   <label className="block text-xs font-semibold text-ink">
                     移动到指定页
                     <span className="mt-2 flex items-center gap-2">
-                      <input className="h-10 min-w-0 flex-1 rounded-md border border-black/15 px-2 text-center text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15" type="number" min="1" max={pageCount} value={position} onChange={(event) => setPosition(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { submitPosition(); setMenuOpen(false) } }} disabled={disabled} aria-label={`将当前第 ${index + 1} 页移动到第几页`} />
+                      <input className="h-10 min-w-0 flex-1 rounded-md border border-black/15 px-2 text-center text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15" type="number" min="1" max={pageCount} value={position} onChange={(event) => setPosition(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); submitPosition(); setMenuOpen(false) } }} disabled={disabled} aria-label={`将当前第 ${index + 1} 页移动到第几页`} />
                       <button type="button" className="tooltip-button grid size-10 shrink-0 place-items-center rounded-lg bg-brand text-white" onClick={() => { submitPosition(); setMenuOpen(false) }} disabled={disabled} aria-label={`将当前页面移到第 ${position} 页`} title="确认移动"><MoveRight size={17} /></button>
                     </span>
                   </label>
                 </div>
               )}
             </div>
-          </>
+          </div>
         )}
       </footer>
     </article>
@@ -154,9 +159,11 @@ function SortablePage({
 
 export function PageEditorGrid(props: PageEditorGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [columns, setColumns] = useState(2)
+  const [width, setWidth] = useState(600)
+  const targetWidth = { small: 150, medium: width < 500 ? 145 : 210, large: 290 }[props.thumbnailSize ?? 'medium']
+  const columns = Math.max(1, Math.floor((width + 16) / (targetWidth + 16)))
   const rows = useMemo(() => Array.from({ length: Math.ceil(props.pages.length / columns) }, (_, index) => props.pages.slice(index * columns, index * columns + columns)), [columns, props.pages])
-  const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => columns === 2 ? 360 : 500, overscan: 3 })
+  const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => (width / columns) * 1.42 + (props.showSourceLabel ? 120 : 80), overscan: 3 })
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
@@ -166,10 +173,12 @@ export function PageEditorGrid(props: PageEditorGridProps) {
   useEffect(() => {
     const element = scrollRef.current
     if (!element) return
-    const observer = new ResizeObserver(([entry]) => setColumns(entry.contentRect.width < 220 ? 1 : 2))
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
+
+  useEffect(() => { virtualizer.measure() }, [columns, width, props.editing, props.showSourceLabel, virtualizer])
 
   useEffect(() => {
     if (props.viewKey !== undefined && scrollRef.current) scrollRef.current.scrollTop = 0
@@ -186,7 +195,7 @@ export function PageEditorGrid(props: PageEditorGridProps) {
       <SortableContext items={props.pages.map((page) => page.id)} strategy={rectSortingStrategy}>
         <div
           ref={scrollRef}
-          className={`mt-5 h-[520px] overflow-y-auto overscroll-contain px-1.5 [scrollbar-color:rgba(14,116,144,.32)_transparent] [scrollbar-width:thin] max-[900px]:h-[560px] ${props.mobileCompact ? 'max-[540px]:h-[min(52vh,420px)]' : 'max-[540px]:h-[500px]'}`}
+          className={`mt-4 overflow-y-auto overscroll-contain px-1.5 [scrollbar-width:thin] ${props.scrollClassName ?? 'h-[min(65vh,720px)] min-h-[280px]'}`}
         >
           <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
             {virtualizer.getVirtualItems().map((virtualRow) => (
@@ -194,8 +203,8 @@ export function PageEditorGrid(props: PageEditorGridProps) {
                 ref={virtualizer.measureElement}
                 data-index={virtualRow.index}
                 key={virtualRow.key}
-                className="absolute top-0 left-0 grid w-full grid-cols-2 items-start gap-5 pb-5 max-[540px]:gap-4 max-[540px]:pb-4 max-[260px]:grid-cols-1"
-                style={{ transform: `translateY(${virtualRow.start}px)` }}
+                className="absolute top-0 left-0 grid w-full items-start gap-4 pb-4"
+                style={{ transform: `translateY(${virtualRow.start}px)`, gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
               >
                 {rows[virtualRow.index].map((page) => (
                   <SortablePage

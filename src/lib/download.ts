@@ -1,7 +1,7 @@
 import JSZip from 'jszip'
 import type { SplitOutput } from './pdfSplitter'
 
-export type CopyPdfResult = 'copied-file' | 'copied-name' | 'failed'
+export type CopyPdfResult = 'copied-file' | 'failed'
 export type SharePdfResult = 'shared' | 'cancelled' | 'unsupported' | 'failed'
 export interface DownloadFile {
   name: string
@@ -60,14 +60,6 @@ export async function copyPdfToClipboard(
     }
   }
 
-  if (clipboard?.writeText) {
-    try {
-      await clipboard.writeText(output.name)
-      return 'copied-name'
-    } catch {
-      // Fall through to a visible failure message in the UI.
-    }
-  }
 
   return 'failed'
 }
