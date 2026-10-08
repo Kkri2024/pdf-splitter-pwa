@@ -47,3 +47,15 @@ npm run deploy:cloudflare
 ```
 
 Cloudflare 登录信息和 API 密钥不会保存在代码仓库中。
+
+
+## 源码与发布维护（2026-10-08）
+
+- 本地目录：`/Users/kesheng/Documents/Codex项目/代码项目/PDF分割工具`。源码需完整下载，不能只保留云端占位文件。
+- GitHub： https://github.com/Kkri2024/pdf-splitter-pwa ，生产分支 `main`。
+- 正式入口： https://pdf-splitter-tool.pages.dev
+- 发布方式：Cloudflare Pages Git 集成。检查失败不发布；推送 `main` 后检查 GitHub 和 Cloudflare 结果。
+- 本地安装：`npm ci`；检查：`npm test`；构建：`npm run build`。
+- 本地预览：构建后用 HTTP 服务访问产物；不要双击 HTML。原有开发命令继续可用。
+- 回滚：对发布提交执行 `git revert` 并推送 `main`；紧急情况下先在 Cloudflare 恢复上一有效部署，随后同步 GitHub，避免下一次推送覆盖回退。
+- 密钥与环境文件不提交。部署凭据仅保存在 GitHub Secrets；不要将浏览器 API Key 写入模型目录。
