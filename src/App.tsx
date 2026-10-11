@@ -38,6 +38,7 @@ import { useRegisterSW } from 'virtual:pwa-register/react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { pageOwner, removeOwnedEntries, toggleSourcePages, orderPagesBySources } from './lib/workspaceLogic'
 import { PageEditorGrid } from './components/PageEditorGrid'
+import { PdfUploadArea } from './components/PdfUploadArea'
 import { copyPdfToClipboard, createFilesZip, createZip, downloadPdf, sharePdf, triggerDownload } from './lib/download'
 import { formatFileSize } from './lib/format'
 import {
@@ -135,19 +136,20 @@ const cx = (...classes: Array<string | false | null | undefined>) => classes.fil
 
 const ui = {
   appShell: 'mesh-background relative isolate flex min-h-screen flex-col overflow-x-hidden text-ink',
-  topbar: 'sticky top-4 z-40 mx-auto mt-4 grid h-[60px] w-[min(980px,calc(100%-32px))] grid-cols-[1fr_auto_1fr] items-center gap-4 rounded-[22px] border border-white/80 bg-white/76 px-4 shadow-[0_18px_46px_rgba(14,116,144,.09),0_2px_10px_rgba(23,24,26,.05)] backdrop-blur-2xl backdrop-saturate-150 transition-[background-color,border-color,box-shadow] duration-180 [padding-left:max(16px,env(safe-area-inset-left))] [padding-right:max(16px,env(safe-area-inset-right))] max-[540px]:top-2 max-[540px]:mt-2 max-[540px]:h-[56px] max-[540px]:w-[calc(100%-16px)] max-[540px]:gap-2 max-[540px]:rounded-[18px] max-[540px]:px-2.5',
-  brand: 'flex min-w-0 items-center gap-2.5 whitespace-nowrap text-[15px] font-semibold max-[540px]:text-sm max-[420px]:[&>span:last-child]:hidden',
-  brandMark: 'grid size-[34px] shrink-0 place-items-center rounded-[11px] bg-brand text-white shadow-[0_8px_18px_rgba(14,116,144,.22)]',
-  topbarActions: 'flex items-center justify-end gap-2 max-[540px]:gap-1',
+  topbar: 'site-header',
+  brand: 'site-brand',
+  brandMark: 'site-brand-mark',
+  topbarActions: 'site-header-actions',
   statusChip: 'flex min-h-8 items-center gap-1.5 rounded-lg border border-success/10 bg-success-soft/90 px-2.5 text-xs font-semibold text-success max-[540px]:hidden',
-  topButton: 'tooltip-button [&>svg]:shrink-0 flex h-10 items-center gap-1.5 rounded-[11px] border border-black/6 bg-white/46 px-3 text-sm text-ink shadow-sm backdrop-blur-xl tabular-nums transition-[transform,background-color,border-color,box-shadow,color] duration-150 ease-out hover:-translate-y-px hover:border-brand/20 hover:bg-white/76 hover:text-brand hover:shadow-md active:scale-[.96] max-[540px]:size-10 max-[540px]:justify-center max-[540px]:px-2 max-[540px]:[&>span]:hidden',
-  workspace: 'mx-auto w-[min(1480px,calc(100%-40px))] flex-1 pt-8 pb-14 max-[900px]:w-[min(760px,calc(100%-28px))] max-[900px]:pt-6 max-[540px]:w-[calc(100%-20px)] max-[540px]:pt-5 max-[540px]:pb-10',
-  glassPanel: 'rounded-[22px] border border-white/82 bg-white/68 shadow-glass backdrop-blur-2xl backdrop-saturate-150 transition-[background-color,border-color,box-shadow] duration-180 ease-out',
-  sectionHeading: 'flex items-center gap-3',
-  iconButton: 'tooltip-button grid size-10 shrink-0 place-items-center rounded-[10px] border-0 bg-transparent text-muted transition-[transform,background-color,color,opacity] duration-150 hover:bg-danger-soft hover:text-danger active:scale-[.96] disabled:pointer-events-none disabled:opacity-40',
-  primaryButton: 'tooltip-button inline-flex min-h-11 items-center justify-center gap-2 rounded-[11px] border border-white/22 bg-brand px-5 font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,.28),0_10px_24px_rgba(14,116,144,.24)] tabular-nums transition-[transform,background-color,box-shadow,opacity] duration-180 ease-out hover:-translate-y-px hover:bg-brand-hover hover:shadow-[inset_0_1px_0_rgba(255,255,255,.32),0_13px_28px_rgba(14,116,144,.28)] active:scale-[.96] disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none',
-  secondaryButton: 'tooltip-button whitespace-nowrap [&>svg]:shrink-0 inline-flex min-h-11 items-center justify-center gap-2 rounded-[11px] border border-black/8 bg-white/68 px-4 font-semibold text-ink shadow-sm transition-[transform,background-color,border-color,color,opacity] duration-150 hover:border-brand/20 hover:bg-brand-soft hover:text-brand active:scale-[.96]',
-  stepNumber: 'grid size-[34px] shrink-0 place-items-center rounded-[11px] bg-brand text-sm font-bold text-white shadow-[0_7px_15px_rgba(14,116,144,.16)]',
+  topButton: 'tooltip-button [&>svg]:shrink-0 flex h-11 items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-transparent bg-transparent px-3 text-sm text-muted tabular-nums transition-colors duration-150 hover:bg-slate-100 hover:text-ink active:bg-slate-200 max-[540px]:size-11 max-[540px]:justify-center max-[540px]:px-2 max-[540px]:[&>span]:hidden',
+  workspace: 'site-workspace',
+  glassPanel: 'rounded-2xl border border-line bg-white transition-colors duration-150',
+  sectionHeading: 'flex min-w-0 items-center gap-3 [&>div]:min-w-0 [&_h2]:text-balance',
+  iconButton: 'tooltip-button grid size-11 shrink-0 place-items-center rounded-[10px] border-0 bg-transparent text-muted transition-colors duration-150 hover:bg-slate-100 hover:text-ink disabled:text-control-muted disabled:pointer-events-none',
+  primaryButton: 'tooltip-button inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border border-transparent bg-brand px-5 text-sm font-medium text-white tabular-nums transition-colors duration-150 hover:bg-brand-hover active:bg-brand-hover disabled:pointer-events-none disabled:bg-slate-200 disabled:text-muted',
+  secondaryButton: 'tooltip-button whitespace-nowrap [&>svg]:shrink-0 inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] border border-line bg-white px-3 text-sm font-medium text-ink transition-colors duration-150 hover:border-brand/25 hover:bg-brand-soft hover:text-brand disabled:pointer-events-none disabled:border-line disabled:bg-slate-50 disabled:text-control-muted',
+  quietButton: 'tooltip-button whitespace-nowrap inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-transparent px-2.5 text-sm font-medium text-muted transition-colors duration-150 hover:bg-brand-soft hover:text-brand disabled:pointer-events-none disabled:text-control-muted',
+  stepNumber: 'section-heading-symbol grid size-[34px] shrink-0 place-items-center rounded-[10px] bg-brand-soft text-sm font-semibold text-brand',
   thumbnail: 'group/thumb relative m-0 min-w-0 cursor-zoom-in overflow-hidden rounded-[5px] border-0 bg-white p-0 shadow-[0_6px_18px_rgba(31,43,58,.1)] transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:shadow-[0_12px_26px_rgba(31,43,58,.16)]',
   toast: 'fixed bottom-[max(22px,env(safe-area-inset-bottom))] left-1/2 z-80 flex min-h-13 -translate-x-1/2 items-center gap-2.5 rounded-lg bg-[#262a31] px-3.5 py-2 text-[13px] text-white shadow-[0_14px_38px_rgba(0,0,0,.22)] animate-fade-in max-[540px]:bottom-[max(12px,env(safe-area-inset-bottom))] max-[540px]:w-[calc(100%-24px)]',
 }
@@ -195,8 +197,6 @@ function App() {
   const [mobileSourceId, setMobileSourceId] = useState<string | null>(null)
   const [narrowLayout, setNarrowLayout] = useState(() => window.innerWidth < 900)
   const [copyNameOutput, setCopyNameOutput] = useState<SplitOutput | null>(null)
-  const [dragActive, setDragActive] = useState(false)
-  const [mergeDragActive, setMergeDragActive] = useState(false)
   const [online, setOnline] = useState(navigator.onLine)
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [showInstallHelp, setShowInstallHelp] = useState(false)
@@ -268,7 +268,7 @@ function App() {
   ])
 
   useEffect(() => {
-    const media = window.matchMedia('(max-width: 899px)')
+    const media = window.matchMedia('(width < 900px)')
     const update = () => setNarrowLayout(media.matches)
     media.addEventListener('change', update)
     return () => media.removeEventListener('change', update)
@@ -1085,19 +1085,20 @@ function App() {
 
   return (
     <div className={ui.appShell}>
+      <a className="skip-link" href="#workspace">跳到工作区</a>
       <header className={ui.topbar} data-app-content>
         <div className={ui.brand}>
           <span className={ui.brandMark} aria-hidden="true"><Scissors size={19} /></span>
           <span>PDF Flow</span>
         </div>
-        <nav className="grid min-w-[230px] grid-cols-2 gap-1 rounded-[14px] border border-black/6 bg-slate-100/75 p-1 max-[540px]:min-w-[154px]" aria-label="工作区">
+        <nav className="site-nav" aria-label="工作区">
           {workspaceOptions.map((option) => (
             <button
               key={option.value}
               type="button"
               className={cx(
-                'flex min-h-10 items-center justify-center gap-2 rounded-[10px] px-4 text-sm font-semibold transition-[transform,background-color,box-shadow,color] duration-150 active:scale-[.96] max-[540px]:px-2',
-                workspaceMode === option.value ? 'bg-white text-brand shadow-sm' : 'text-muted hover:text-ink',
+                'site-nav-link',
+                workspaceMode === option.value && 'is-active',
               )}
               onClick={() => {
                 setWorkspaceMode(option.value)
@@ -1135,7 +1136,7 @@ function App() {
             <summary className={cx(ui.topButton, 'cursor-pointer list-none [&::-webkit-details-marker]:hidden')} aria-label="更多选项" title="更多选项">
               <MoreHorizontal size={18} />
             </summary>
-            <div className="absolute top-12 right-0 z-50 w-48 rounded-[14px] border border-black/8 bg-white/94 p-2 shadow-raised backdrop-blur-2xl">
+            <div className="absolute top-12 right-0 z-50 w-48 rounded-[14px] border border-black/8 bg-white p-2 shadow-raised">
               <p className="flex min-h-10 items-center gap-2 rounded-[10px] px-3 text-xs font-semibold text-success"><ShieldCheck size={15} /> 本地处理，不上传</p>
               <button
                 className="flex min-h-11 w-full items-center gap-2 rounded-[10px] px-3 text-left text-sm text-ink transition-[transform,background-color,color] duration-150 hover:bg-brand-soft hover:text-brand active:scale-[.96]"
@@ -1152,7 +1153,11 @@ function App() {
         </div>
       </header>
 
-      <main className={cx(ui.workspace, ((workspaceMode === 'split' && source) || (workspaceMode === 'merge' && mergeSources.length > 0)) && 'max-[899px]:pb-28')} data-app-content>
+      <main id="workspace" tabIndex={-1} className={cx(ui.workspace, 'website-main', ((workspaceMode === 'split' && source) || (workspaceMode === 'merge' && mergeSources.length > 0)) && 'max-[900px]:pb-28')} data-app-content>
+        <section className={cx('site-intro', ((workspaceMode === 'split' && source) || (workspaceMode === 'merge' && mergeSources.length > 0)) && 'site-intro-compact')} aria-labelledby="workspace-heading">
+          <h1 id="workspace-heading">{workspaceMode === 'split' ? '分割 PDF' : '合并 PDF'}</h1>
+          <p className="site-intro-description">{workspaceMode === 'split' ? '预览每一页，按页数或范围拆分文档。' : '从多份文档中选页，按需要的顺序合为一份。'}</p>
+        </section>
         <input
           ref={inputRef}
           type="file"
@@ -1166,49 +1171,11 @@ function App() {
           aria-label="选择 PDF 文件"
         />
         {workspaceMode === 'split' && (!source ? (
-          <section
-            className={cx(
-              ui.glassPanel,
-              'relative isolate mx-auto flex min-h-[470px] max-w-[980px] animate-surface-enter flex-col items-center justify-center overflow-hidden border-dashed border-brand/30 px-6 py-12 text-center transition-[transform,background-color,border-color,box-shadow] duration-180 ease-out after:pointer-events-none after:absolute after:inset-4 after:rounded-[16px] after:border after:border-white/70 max-[540px]:min-h-[390px] max-[540px]:px-4.5 max-[540px]:py-10',
-              dragActive && 'drag-neon scale-[1.01] border-cyan-400/70 bg-white/76',
-            )}
-            onDragEnter={(event) => { event.preventDefault(); setDragActive(true) }}
-            onDragOver={(event) => event.preventDefault()}
-            onDragLeave={(event) => {
-              if (event.currentTarget === event.target) setDragActive(false)
-            }}
-            onDrop={(event) => {
-              event.preventDefault()
-              setDragActive(false)
-              void processFile(event.dataTransfer.files[0])
-            }}
-          >
-            <div className={cx('relative z-10 flex flex-col items-center transition-[transform,opacity] duration-200 ease-out', (dragActive || busy === 'loading') && 'pointer-events-none scale-95 opacity-0')}>
-              <span className="mb-5 grid size-16 place-items-center rounded-[18px] border border-brand/15 bg-brand-soft text-brand shadow-[0_10px_22px_rgba(14,116,144,.11)]" aria-hidden="true">
-                <Upload size={28} />
-              </span>
-              <div>
-                <h2 className="mb-2 text-[21px] leading-tight font-semibold">拖放 PDF 到这里</h2>
-                <p className="mb-6 text-sm leading-relaxed text-muted">或从 Mac、iCloud 云盘及“文件”中选择</p>
-              </div>
-              <button className={ui.primaryButton} type="button" disabled={isBusy} onClick={openSplitFilePicker}>
-                <FileText size={18} /> 选择 PDF
-              </button>
-            </div>
-            {(dragActive || busy === 'loading') && (
-              <div className="absolute inset-0 z-20 flex animate-fade-in flex-col items-center justify-center bg-white/15 backdrop-blur-[2px]">
-                <div className="relative grid size-24 place-items-center rounded-full bg-white/55 shadow-xl shadow-cyan-500/10 backdrop-blur-xl">
-                  <span className="absolute inset-2 animate-spin rounded-full border-[3px] border-cyan-100 border-r-brand border-t-cyan-400" />
-                  <strong className="text-lg font-black text-brand">0%</strong>
-                </div>
-                <p className="mt-5 text-sm font-bold tracking-wide text-slate-700">准备中...</p>
-              </div>
-            )}
-          </section>
+          <PdfUploadArea loading={busy === 'loading'} disabled={isBusy} buttonClassName={ui.primaryButton} onChoose={openSplitFilePicker} onFiles={(files) => { void processFile(files[0]) }} />
         ) : (
           <>
-            <div className="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-5 max-[1239px]:grid-cols-[minmax(0,1fr)_300px] max-[899px]:grid-cols-1">
-              <aside className={cx(ui.glassPanel, 'col-span-2 flex min-w-0 flex-wrap items-center gap-4 p-4.5 max-[899px]:col-span-1')} aria-label="当前文件">
+            <div className="split-workspace grid grid-cols-[minmax(0,1fr)_320px] items-start gap-6 max-[1239px]:grid-cols-[minmax(0,1fr)_300px] max-[900px]:grid-cols-1">
+              <aside className={cx(ui.glassPanel, 'source-summary col-span-2 flex min-w-0 flex-wrap items-center gap-4 p-4.5 max-[900px]:col-span-1')} aria-label="当前文件">
                 <div className="flex min-w-0 flex-1 items-center gap-3 max-[540px]:basis-full">
                   <span className="grid size-11 shrink-0 place-items-center rounded-[13px] bg-brand-soft text-brand" aria-hidden="true"><FileCheck2 size={22} /></span>
                   <div className="min-w-0 flex-1">
@@ -1230,8 +1197,8 @@ function App() {
               <section
                 className={cx(
                   ui.glassPanel,
-                  'order-3 sticky top-24 animate-surface-enter px-5 py-5.5 max-[1239px]:order-2 max-[899px]:fixed max-[899px]:inset-x-3 max-[899px]:bottom-[calc(78px+env(safe-area-inset-bottom))] max-[899px]:top-auto max-[899px]:z-[70] max-[899px]:max-h-[min(76vh,620px)] max-[899px]:overflow-y-auto max-[540px]:inset-x-0 max-[540px]:bottom-0 max-[540px]:max-h-[86vh] max-[540px]:rounded-b-none max-[540px]:px-4.5 max-[540px]:py-5',
-                  !mobileSplitSettingsOpen && 'max-[899px]:hidden',
+                  'split-settings order-3 sticky top-24 animate-surface-enter px-5 py-5.5 max-[1239px]:order-2 max-[900px]:fixed max-[900px]:inset-x-3 max-[900px]:bottom-[calc(78px+env(safe-area-inset-bottom))] max-[900px]:top-auto max-[900px]:z-[70] max-[900px]:max-h-[min(76vh,620px)] max-[900px]:overflow-y-auto max-[540px]:inset-x-0 max-[540px]:bottom-0 max-[540px]:max-h-[86vh] max-[540px]:rounded-b-none max-[540px]:px-4.5 max-[540px]:py-5',
+                  !mobileSplitSettingsOpen && 'max-[900px]:hidden',
                 )}
                 ref={splitSettingsRef}
                 role={narrowLayout && mobileSplitSettingsOpen ? "dialog" : undefined}
@@ -1239,23 +1206,23 @@ function App() {
                 tabIndex={-1}
                 aria-labelledby="split-settings-title"
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div className={ui.sectionHeading}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className={cx(ui.sectionHeading, 'flex-1 basis-[130px]')}>
                     <span className={ui.stepNumber}><Settings2 size={17} /></span>
                     <h2 className="text-[17px] leading-tight font-semibold" id="split-settings-title">分割方式</h2>
                   </div>
-                  <button className="hidden size-11 place-items-center rounded-[11px] border border-black/8 bg-white/75 text-muted active:scale-[.96] max-[899px]:grid" type="button" onClick={() => setMobileSplitSettingsOpen(false)} aria-label="关闭分割设置">
+                  <button className="hidden size-11 place-items-center rounded-[11px] border border-black/8 bg-white text-muted active:scale-[.96] max-[900px]:grid" type="button" onClick={() => setMobileSplitSettingsOpen(false)} aria-label="关闭分割设置">
                     <X size={18} />
                   </button>
                 </div>
 
-                <div className="mt-7 grid grid-cols-3 gap-2 bg-transparent" role="group" aria-label="分割方式">
+                <div className="mt-6 grid grid-cols-3 gap-1 rounded-[10px] bg-slate-100 p-1" role="group" aria-label="分割方式">
                   {modeOptions.map((option) => (
                     <button
                       key={option.value}
                       type="button"
                       aria-pressed={mode === option.value}
-                      className={cx('h-10 min-w-0 cursor-pointer rounded-full border border-[#e0e0e0] bg-white/45 px-2 text-[13px] font-semibold whitespace-nowrap text-muted transition-[background-color,border-color,box-shadow,color] duration-150 hover:border-brand/35 hover:bg-white/75 max-[540px]:text-xs', mode === option.value && 'border-brand/35 bg-brand-soft text-brand shadow-[0_4px_12px_rgba(14,116,144,.12)]')}
+                      className={cx('min-h-10 min-w-0 rounded-lg border px-2 text-[13px] font-medium whitespace-nowrap transition-colors duration-150 disabled:text-control-muted', mode === option.value ? 'border-line bg-white text-brand' : 'border-transparent text-muted hover:text-ink')}
                       onClick={() => {
                         setMode(option.value)
                         setOutputs([])
@@ -1269,14 +1236,14 @@ function App() {
                   ))}
                 </div>
 
-                <div className="min-h-[120px] pt-8">
+                <div className="min-h-[120px] pt-6">
                   {mode === 'fixed' && (
                     <label className="flex flex-col gap-2 text-[13px] font-semibold text-ink">
                       <span>每份页数</span>
                       <div className="flex items-center gap-2.5">
                         <input
                           ref={pagesPerFileRef}
-                          className="h-11 w-[98px] rounded-lg border border-[#e0e0e0] bg-white/90 px-3 text-base font-semibold text-ink transition-shadow focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand/15"
+                          className="h-11 w-[98px] rounded-lg border border-line bg-white px-3 text-base font-semibold text-ink transition-shadow focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand/15"
                           type="number"
                           min="1"
                           max={editState.present.pages.length}
@@ -1302,7 +1269,7 @@ function App() {
                       <span>页码范围</span>
                       <input
                         ref={rangeInputRef}
-                        className="h-11 w-full rounded-lg border border-[#e0e0e0] bg-white/90 px-3 text-ink transition-shadow focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand/15"
+                        className="h-11 w-full rounded-lg border border-line bg-white px-3 text-ink transition-shadow focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand/15"
                         type="text"
                         inputMode="text"
                         value={rangeSpec}
@@ -1312,7 +1279,7 @@ function App() {
                         aria-invalid={Boolean(planResult.error) || undefined}
                         aria-describedby={planResult.error ? 'split-plan-error' : undefined}
                       />
-                      <span className="grid grid-cols-2 gap-1 rounded-lg bg-slate-200/80 p-1" role="group" aria-label="自定义页面输出方式">
+                      <span className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1" role="group" aria-label="自定义页面输出方式">
                         <button type="button" className={cx('min-h-9 rounded-md px-2 text-xs font-semibold text-muted', selectionOutputMode === 'segments' && 'bg-white text-ink shadow-sm')} disabled={isBusy} aria-pressed={selectionOutputMode === 'segments'} onClick={() => { setSelectionOutputMode('segments'); setOutputs([]) }}>按范围分别生成</button>
                         <button type="button" className={cx('min-h-9 rounded-md px-2 text-xs font-semibold text-muted', selectionOutputMode === 'merged' && 'bg-white text-ink shadow-sm')} disabled={isBusy} aria-pressed={selectionOutputMode === 'merged'} onClick={() => { setSelectionOutputMode('merged'); setOutputs([]) }}>合并为一份</button>
                       </span>
@@ -1340,50 +1307,51 @@ function App() {
                 )}
               </section>
 
-              <section className="order-2 min-w-0 animate-surface-enter rounded-[22px] border border-black/7 bg-white p-5.5 shadow-[0_18px_46px_rgba(23,24,26,.07)] max-[1239px]:order-1 max-[899px]:order-2 max-[540px]:p-4" aria-labelledby="preview-title">
-                <div className="flex items-center justify-between gap-3">
-                  <div className={ui.sectionHeading}>
-                    <span className="grid size-[34px] shrink-0 place-items-center rounded-[11px] bg-brand-soft text-brand"><Layers3 size={17} /></span>
+              <section className="document-preview order-2 min-w-0 animate-surface-enter rounded-2xl border border-line bg-white p-5.5 max-[1239px]:order-1 max-[900px]:order-2 max-[540px]:p-4" aria-labelledby="preview-title">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className={cx(ui.sectionHeading, 'flex-1 basis-[130px]')}>
+                    <span className="section-heading-symbol grid size-[34px] shrink-0 place-items-center rounded-[11px] bg-brand-soft text-brand"><Layers3 size={17} /></span>
                     <div>
                       <h2 className="text-[17px] leading-tight font-semibold" id="preview-title">页面预览</h2>
                       <p className="mt-1 text-xs text-muted" aria-live="polite">
                         {activePlanJobIndex === null
                           ? `${editState.present.pages.length} 页`
                           : `显示 ${visibleSplitPages.length} / ${editState.present.pages.length} 页`}
-                        {editorExpanded ? ` · 正在选择要编辑的页面：${visibleSelectionIds.length} 页` : mode === 'custom' ? ` · 输出所选 ${visibleSelectionIds.length} 页` : ' · 输出全部页面'}
+                        {editorExpanded ? ` · 编辑已选 ${visibleSelectionIds.length} 页` : mode === 'custom' ? ` · 输出所选 ${visibleSelectionIds.length} 页` : ' · 输出全部页面'}
                       </p>
                     </div>
                   </div>
-                  <button className={cx('tooltip-button relative flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm transition-colors', editorExpanded ? 'border-brand/20 bg-brand-soft text-brand' : 'border-black/10 bg-white/60 text-muted hover:text-brand')} type="button" onClick={() => setEditorExpanded((expanded) => !expanded)} aria-expanded={editorExpanded} disabled={isBusy} aria-label={editorExpanded ? '完成编辑' : '编辑页面'} title={editorExpanded ? '收起编辑' : '编辑页面'}>
+                  <button className={cx('tooltip-button relative flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border px-3 text-sm transition-colors max-[359px]:px-2', editorExpanded ? 'border-brand/20 bg-brand-soft text-brand' : 'border-line bg-white text-muted hover:text-brand')} type="button" onClick={() => setEditorExpanded((expanded) => !expanded)} aria-expanded={editorExpanded} disabled={isBusy} aria-label={editorExpanded ? '完成编辑' : '编辑页面'} title={editorExpanded ? '收起编辑' : '编辑页面'}>
                     <Settings2 size={19} /><span>{editorExpanded ? '完成编辑' : '编辑页面'}</span>
                     {editState.past.length > 0 && <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-amber-500 ring-2 ring-white" aria-label="已有页面编辑" />}
                   </button>
                 </div>
-                <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted" role="group" aria-label="缩略图大小">
-                  <span>缩略图</span>{([['small', '小'], ['medium', '中'], ['large', '大']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={thumbnailSize === value} onClick={() => setThumbnailSize(value)} className={cx('min-h-10 min-w-10 rounded-lg border px-3', thumbnailSize === value && 'bg-brand-soft text-brand border-brand')}>{label}</button>)}
+                <div className="preview-size mt-4 flex flex-wrap items-center gap-2 text-xs text-muted" role="group" aria-label="缩略图大小">
+                  <span>缩略图</span>{([['small', '小'], ['medium', '中'], ['large', '大']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={thumbnailSize === value} onClick={() => setThumbnailSize(value)} className={cx('min-h-10 min-w-10 rounded-lg border px-3 transition-colors', thumbnailSize === value ? 'bg-brand-soft text-brand border-brand' : 'border-line')}>{label}</button>)}
                   {!editorExpanded && mode === 'custom' && <button className={ui.secondaryButton} type="button" onClick={handleToggleAllPages} disabled={isBusy}>{outputSelectedIds.length === editState.present.pages.length ? '取消全选' : '全选输出页面'}</button>}
                 </div>
-                {editorExpanded && <div className="mt-4 flex animate-fade-in flex-wrap items-center gap-1.5 rounded-lg border border-black/8 bg-white/45 p-2">
+                {editorExpanded && <div className="editor-tools mt-4 flex animate-fade-in flex-wrap items-center gap-1.5 [&>button]:whitespace-nowrap">
                   <button className="tooltip-button grid size-10 place-items-center rounded-md text-brand hover:bg-brand-soft" type="button" onClick={handleToggleAllPages} disabled={isBusy} aria-label={editState.present.selectedIds.length === editState.present.pages.length ? '取消全选' : '全选页面'} title={editState.present.selectedIds.length === editState.present.pages.length ? '取消全选' : '全选'}><ListChecks size={18} /></button>
                   <button className="tooltip-button grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'rotate', direction: -1 })} disabled={isBusy || editState.present.selectedIds.length === 0} aria-label="所选页面向左旋转" title="向左旋转"><RotateCcw size={18} /></button>
                   <button className="tooltip-button grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'rotate', direction: 1 })} disabled={isBusy || editState.present.selectedIds.length === 0} aria-label="所选页面向右旋转" title="向右旋转"><RotateCw size={18} /></button>
                   <button className="tooltip-button inline-flex min-h-10 items-center gap-1.5 px-2 rounded-md text-muted hover:bg-danger-soft hover:text-danger disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'delete-selected' })} disabled={isBusy || editState.present.selectedIds.length === 0} aria-label="删除所选页面" title="删除"><Trash2 size={18} /><span>删除</span></button>
                   <span className="mx-1 h-6 w-px bg-black/10" aria-hidden="true" />
-                  <button className="tooltip-button inline-flex min-h-10 items-center gap-1.5 px-2 rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'undo' })} disabled={isBusy || editState.past.length === 0} aria-label="撤销页面编辑" title="撤销"><Undo2 size={18} /><span>撤销</span></button>
+                  <button className="tooltip-button inline-flex min-h-10 items-center gap-1.5 px-2 rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'undo' })} disabled={isBusy || editState.past.length === 0} aria-label="撤销页面编辑" title="撤销"><Undo2 size={18} /><span className="max-[540px]:hidden">撤销</span></button>
                   <button className="tooltip-button grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'redo' })} disabled={isBusy || editState.future.length === 0} aria-label="重做页面编辑" title="重做"><Redo2 size={18} /></button>
                   <span className="mx-1 h-6 w-px bg-black/10" aria-hidden="true" />
-                  <button className="tooltip-button inline-flex min-h-10 items-center gap-1.5 px-2 rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => void handleExportEdited()} disabled={isBusy || editState.present.pages.length === 0} aria-label="导出编辑后的完整 PDF" title="导出完整 PDF"><FileOutput size={18} /><span>导出完整 PDF</span></button>
+                  <button className="tooltip-button inline-flex min-h-10 items-center gap-1.5 px-2 rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => void handleExportEdited()} disabled={isBusy || editState.present.pages.length === 0} aria-label="导出编辑后的完整 PDF" title="导出完整 PDF"><FileOutput size={18} /><span className="max-[540px]:hidden">导出完整 PDF</span><span className="hidden max-[540px]:inline">导出</span></button>
                   <button className="tooltip-button grid size-10 place-items-center rounded-md text-muted hover:bg-white hover:text-brand disabled:opacity-35" type="button" onClick={() => applyPageEdit({ type: 'restore' })} disabled={isBusy} aria-label="恢复原始页面" title="恢复原始"><ListRestart size={18} /></button>
                 </div>}
                 {!planResult.error && planResult.plan.length > 0 && (
-                  <div className="mt-4 flex gap-2 overflow-x-auto rounded-[14px] border border-brand/10 bg-brand-soft/55 p-2 [scrollbar-width:thin]" aria-label={`按预计生成的 ${planResult.plan.length} 份筛选画布`}>
+                  <div className="plan-navigation mt-4 flex gap-2 overflow-x-auto [scrollbar-width:thin]" role="group" aria-label={`按预计生成的 ${planResult.plan.length} 份筛选画布`}>
+                    <span className="plan-label">预计分组</span>
                     <button
                       type="button"
                       className={cx(
-                        'flex min-h-10 shrink-0 items-center gap-2 rounded-[10px] border px-3 text-xs font-semibold shadow-sm transition-[transform,background-color,border-color,color,box-shadow] duration-150 active:scale-[.96]',
+                        'flex min-h-10 shrink-0 items-center gap-2 rounded-[10px] border px-3 text-xs font-medium transition-[transform,background-color,border-color,color,box-shadow] duration-150 active:scale-[.96]',
                         activePlanJobIndex === null
-                          ? 'border-brand bg-brand text-white shadow-[0_7px_16px_rgba(14,116,144,.2)]'
-                          : 'border-white bg-white/80 text-muted hover:border-brand/25 hover:text-brand',
+                          ? 'border-brand bg-brand text-white'
+                          : 'border-line bg-white text-muted hover:border-brand/25 hover:text-brand',
                       )}
                       onClick={() => setActivePlanJobIndex(null)}
                       aria-pressed={activePlanJobIndex === null}
@@ -1395,10 +1363,10 @@ function App() {
                       <button
                         type="button"
                         className={cx(
-                          'flex min-h-10 shrink-0 items-center gap-2 rounded-[10px] border px-3 text-xs shadow-sm transition-[transform,background-color,border-color,color,box-shadow] duration-150 active:scale-[.96]',
+                          'flex min-h-10 shrink-0 items-center gap-2 rounded-[10px] border px-3 text-xs transition-[transform,background-color,border-color,color,box-shadow] duration-150 active:scale-[.96]',
                           activePlanJobIndex === index
-                            ? 'border-brand bg-brand text-white shadow-[0_7px_16px_rgba(14,116,144,.2)]'
-                            : 'border-white bg-white/80 text-muted hover:border-brand/25 hover:text-brand',
+                            ? 'border-brand bg-brand text-white'
+                            : 'border-line bg-white text-muted hover:border-brand/25 hover:text-brand',
                         )}
                         key={`${job.name}-${index}`}
                         onClick={() => setActivePlanJobIndex((current) => current === index ? null : index)}
@@ -1434,15 +1402,15 @@ function App() {
               </section>
             </div>
             {mobileSplitSettingsOpen && (
-              <button className="fixed inset-0 z-[60] hidden cursor-default bg-slate-950/25 backdrop-blur-[2px] max-[899px]:block" type="button" onClick={() => setMobileSplitSettingsOpen(false)} aria-label="关闭分割设置" />
+              <button className="fixed inset-0 z-[60] hidden cursor-default bg-slate-950/25 backdrop-blur-[2px] max-[900px]:block" type="button" onClick={() => setMobileSplitSettingsOpen(false)} aria-label="关闭分割设置" />
             )}
-            <div className="fixed inset-x-3 bottom-[max(12px,env(safe-area-inset-bottom))] z-50 hidden min-h-[64px] items-center gap-2 rounded-[18px] border border-white/80 bg-white/88 p-2 shadow-[0_18px_46px_rgba(14,116,144,.16)] backdrop-blur-2xl max-[899px]:flex">
-              <button className="flex min-h-12 min-w-0 flex-1 items-center gap-2 rounded-[12px] px-3 text-left text-sm font-semibold text-ink transition-[background-color,color,transform] duration-150 hover:bg-brand-soft active:scale-[.96]" type="button" onClick={() => setMobileSplitSettingsOpen(true)} aria-expanded={mobileSplitSettingsOpen}>
+            <div className="fixed inset-x-3 bottom-[max(12px,env(safe-area-inset-bottom))] z-50 hidden min-h-[64px] items-center gap-2 rounded-2xl border border-line bg-white p-2 shadow-raised max-[900px]:flex">
+              <button className="flex min-h-12 min-w-0 flex-1 items-center gap-2 rounded-[10px] px-2 text-left text-sm max-[359px]:gap-1 max-[359px]:px-1 font-semibold text-ink transition-[background-color,color,transform] duration-150 hover:bg-brand-soft active:scale-[.96]" type="button" onClick={() => setMobileSplitSettingsOpen(true)} aria-expanded={mobileSplitSettingsOpen}>
                 <Settings2 className="shrink-0 text-brand" size={18} />
                 <span className="min-w-0 truncate">{mode === 'fixed' ? `每 ${pagesPerFile || '—'} 页` : mode === 'each' ? '逐页分割' : '自定义范围'}</span>
                 <span className="ml-auto shrink-0 text-xs font-medium text-muted">{planResult.error ? '需调整' : `${planResult.plan.length} 份`}</span>
               </button>
-              <button className={cx(ui.primaryButton, 'shrink-0 px-5')} type="button" onClick={handleSplit} disabled={isBusy || Boolean(planResult.error)}>
+              <button className={cx(ui.primaryButton, 'shrink-0 px-3 max-[359px]:px-2')} type="button" onClick={handleSplit} disabled={isBusy || Boolean(planResult.error)}>
                 {busy === 'splitting' ? <RefreshCw className="animate-spin" size={18} /> : <Scissors size={18} />}
                 <span className="max-[540px]:hidden">{splitButtonLabel}</span>
                 <span className="hidden max-[540px]:inline">开始分割</span>
@@ -1453,53 +1421,26 @@ function App() {
 
         {workspaceMode === 'merge' && (
           <>
-            <section
-              className={cx(
-                ui.glassPanel,
-                'relative isolate flex min-h-[360px] animate-surface-enter flex-col items-center justify-center overflow-hidden border-dashed border-brand/30 px-6 py-8 text-center transition-[transform,background-color,border-color,box-shadow] duration-180 max-[540px]:px-4.5',
-                mergeSources.length > 0 && 'hidden',
-                mergeDragActive && 'drag-neon scale-[1.01] border-cyan-400/70 bg-white/76',
-              )}
-              onDragEnter={(event) => { event.preventDefault(); setMergeDragActive(true) }}
-              onDragOver={(event) => event.preventDefault()}
-              onDragLeave={(event) => {
-                if (event.currentTarget === event.target) setMergeDragActive(false)
-              }}
-              onDrop={(event) => {
-                event.preventDefault()
-                setMergeDragActive(false)
-                void processMergeFiles(event.dataTransfer.files)
-              }}
-            >
-              <input
-                ref={mergeInputRef}
-                type="file"
-                multiple
-                accept="application/pdf,.pdf"
-                onChange={(event) => void processMergeFiles(event.target.files ?? undefined)}
-                className="pointer-events-none absolute size-px opacity-0"
-                aria-label="选择多个 PDF 文件"
-              />
-              <span className="mb-4 grid size-14 place-items-center rounded-[17px] border border-brand/15 bg-brand-soft text-brand" aria-hidden="true">
-                <Layers3 size={26} />
-              </span>
-              <h2 className="mb-2 text-[21px] leading-tight font-semibold">上传多个 PDF</h2>
-              <p className="mb-5 max-w-[520px] text-sm leading-relaxed text-muted">默认合并全部页面。添加文件后，可调整文件顺序，或选择需要的页面。</p>
-              <button className={ui.primaryButton} type="button" disabled={isBusy} onClick={() => mergeInputRef.current?.click()} title="添加一个或多个 PDF 文件">
-                <Upload size={18} /> 添加 PDF
-              </button>
-              {busy === 'loading' && <p className="mt-4 text-sm font-semibold text-brand">正在读取 PDF...</p>}
-            </section>
+            <input
+              ref={mergeInputRef}
+              type="file"
+              multiple
+              accept="application/pdf,.pdf"
+              onChange={(event) => void processMergeFiles(event.target.files ?? undefined)}
+              className="pointer-events-none absolute size-px opacity-0"
+              aria-label="选择多个 PDF 文件"
+            />
+            {mergeSources.length === 0 && <PdfUploadArea multiple loading={busy === 'loading'} disabled={isBusy} buttonClassName={ui.primaryButton} onChoose={() => mergeInputRef.current?.click()} onFiles={(files) => { void processMergeFiles(files) }} />}
 
             {mergeSources.length > 0 && (
               <>
-                <div className="grid grid-cols-[360px_minmax(0,1fr)] items-start gap-5 max-[1100px]:grid-cols-[300px_minmax(0,1fr)] max-[899px]:grid-cols-1">
-                <section className="min-w-0 animate-surface-enter rounded-[22px] border border-black/7 bg-white p-5.5 shadow-[0_18px_46px_rgba(23,24,26,.07)] max-[540px]:p-4" aria-labelledby="merge-sources-title">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className={ui.sectionHeading}>
+                <div className="merge-workspace grid grid-cols-[300px_minmax(0,1fr)] items-start gap-8 max-[1100px]:grid-cols-[280px_minmax(0,1fr)] max-[900px]:grid-cols-1">
+                <section className="merge-sources min-w-0 animate-surface-enter" aria-labelledby="merge-sources-title">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className={cx(ui.sectionHeading, 'flex-1 basis-[150px]')}>
                       <span className={ui.stepNumber}><Layers3 size={17} /></span>
                       <div>
-                        <h2 className="text-[17px] leading-tight font-semibold" id="merge-sources-title">来源文件与页面</h2>
+                        <h2 className="text-[17px] leading-tight font-semibold" id="merge-sources-title">来源文件</h2>
                         <p className="mt-1 text-xs text-muted">{mergeSources.length} 个 PDF · 已选 {mergeSelectedPages.length} 页</p>
                       </div>
                     </div>
@@ -1512,15 +1453,19 @@ function App() {
                     {mergeSources.map((mergeSource, sourceIndex) => {
                       const pages = createMergePages(mergeSource)
                       const count = mergeSelectedPages.filter(page => page.sourceId === mergeSource.id).length
-                      return <section className="min-w-0 rounded-2xl border border-black/10 bg-slate-50 p-4" key={mergeSource.id} aria-label={mergeSource.name}>
+                      return <section className="source-file min-w-0" key={mergeSource.id} aria-label={mergeSource.name}>
                         <strong className="block truncate text-sm" title={mergeSource.name}>{sourceIndex + 1}. {mergeSource.name}</strong>
                         <p className="mt-1 text-xs text-muted">{mergeSource.pageCount} 页 · 已选 {count} 页 · {formatFileSize(mergeSource.file.size)}</p>
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <div className="source-file-actions">
                           <button type="button" className={ui.secondaryButton} disabled={isBusy} onClick={() => setMobileSourceId(mergeSource.id)}>选择页面</button>
-                          <button type="button" className={ui.secondaryButton} disabled={isBusy} onClick={() => { setMergeSelectedPages(current => toggleSourcePages(current, pages)); setMergeOutputs([]) }}>{count === pages.length ? '取消全选' : '全选'}</button>
-                          <button type="button" className={ui.secondaryButton} disabled={isBusy || pageOrderEdited || sourceIndex === 0} onClick={() => moveMergeSource(mergeSource.id, -1)} aria-label={`上移文件 ${mergeSource.name}`}>上移</button>
-                          <button type="button" className={ui.secondaryButton} disabled={isBusy || pageOrderEdited || sourceIndex === mergeSources.length - 1} onClick={() => moveMergeSource(mergeSource.id, 1)} aria-label={`下移文件 ${mergeSource.name}`}>下移</button>
-                          <button type="button" className={ui.iconButton} disabled={isBusy} onClick={() => removeMergeSource(mergeSource.id)} aria-label={`移除 ${mergeSource.name}`}><Trash2 size={18} /></button>
+                          <button type="button" className={ui.quietButton} disabled={isBusy} onClick={() => { setMergeSelectedPages(current => toggleSourcePages(current, pages)); setMergeOutputs([]) }}>{count === pages.length ? '取消全选' : '全选'}</button>
+                          <div className="source-file-order">
+                            <div className="flex items-center gap-1">
+                          <button type="button" className={ui.quietButton} disabled={isBusy || pageOrderEdited || sourceIndex === 0} onClick={() => moveMergeSource(mergeSource.id, -1)} aria-label={`上移文件 ${mergeSource.name}`}>上移</button>
+                          <button type="button" className={ui.quietButton} disabled={isBusy || pageOrderEdited || sourceIndex === mergeSources.length - 1} onClick={() => moveMergeSource(mergeSource.id, 1)} aria-label={`下移文件 ${mergeSource.name}`}>下移</button>
+                            </div>
+                          <button type="button" className={cx(ui.iconButton, 'hover:bg-danger-soft hover:text-danger')} disabled={isBusy} onClick={() => removeMergeSource(mergeSource.id)} aria-label={`移除 ${mergeSource.name}`}><Trash2 size={18} /></button>
+                          </div>
                         </div>
                       </section>
                     })}
@@ -1531,8 +1476,8 @@ function App() {
                   ref={mergeOrderRef}
                   className={cx(
                     ui.glassPanel,
-                    'sticky top-24 min-w-0 scroll-mt-20 animate-surface-enter p-5 max-[899px]:fixed max-[899px]:inset-x-3 max-[899px]:bottom-[calc(78px+env(safe-area-inset-bottom))] max-[899px]:top-auto max-[899px]:z-[70] max-[899px]:max-h-[min(76vh,620px)] max-[899px]:flex max-[899px]:flex-col max-[899px]:h-[76vh] max-[899px]:overflow-hidden max-[540px]:inset-0 max-[540px]:h-dvh max-[540px]:max-h-none max-[540px]:rounded-none max-[540px]:p-4.5',
-                    !mobileMergeOrderOpen && 'max-[899px]:!hidden',
+                    'merge-order sticky top-24 min-w-0 scroll-mt-20 animate-surface-enter p-5 max-[900px]:fixed max-[900px]:inset-x-3 max-[900px]:bottom-[calc(78px+env(safe-area-inset-bottom))] max-[900px]:top-auto max-[900px]:z-[70] max-[900px]:max-h-[min(76vh,620px)] max-[900px]:flex max-[900px]:flex-col max-[900px]:h-[76vh] max-[900px]:overflow-hidden max-[540px]:inset-0 max-[540px]:h-dvh max-[540px]:max-h-none max-[540px]:rounded-none max-[540px]:p-4.5',
+                    !mobileMergeOrderOpen && 'max-[900px]:!hidden',
                   )}
                   role={narrowLayout && mobileMergeOrderOpen ? "dialog" : undefined}
                   aria-modal={narrowLayout && mobileMergeOrderOpen ? true : undefined}
@@ -1544,15 +1489,15 @@ function App() {
                     <div className={ui.sectionHeading}>
                       <span className={ui.stepNumber}><ListChecks size={17} /></span>
                       <div>
-                        <h2 className="text-[17px] leading-tight font-semibold" id="merge-order-title">调整顺序</h2>
-                        <p className="mt-1 text-xs text-muted">拖拽页面决定最终 PDF 顺序</p>
+                        <h2 className="text-[17px] leading-tight font-semibold" id="merge-order-title">合并顺序</h2>
+                        <p className="mt-1 text-xs text-muted">拖动排序，或在更多操作中指定位置</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <button className={ui.secondaryButton} type="button" onClick={() => { if (!window.confirm('清空待合并页面及其顺序？来源文件仍会保留。')) return; setMergeSelectedPages([]); setMergeOutputs([]); setPageOrderEdited(false) }} disabled={isBusy || mergeSelectedPages.length === 0} title="清空待合并页面">
                         <Trash2 size={16} /> 清空
                       </button>
-                      <button className="hidden size-11 place-items-center rounded-[11px] border border-black/8 bg-white/75 text-muted active:scale-[.96] max-[899px]:grid" type="button" onClick={() => setMobileMergeOrderOpen(false)} aria-label="关闭合并顺序面板">
+                      <button className="hidden size-11 place-items-center rounded-[11px] border border-black/8 bg-white text-muted active:scale-[.96] max-[900px]:grid" type="button" onClick={() => setMobileMergeOrderOpen(false)} aria-label="关闭合并顺序面板" data-dialog-initial-focus>
                         <X size={18} />
                       </button>
                     </div>
@@ -1588,7 +1533,7 @@ function App() {
                     />
                   ))}
                   <button
-                    className={cx(ui.primaryButton, 'mt-5 w-full')}
+                    className={cx(ui.primaryButton, 'merge-submit mt-5 w-full')}
                     type="button"
                     onClick={() => void handleMergeSelected()}
                     disabled={isBusy || mergeSelectedPages.length === 0}
@@ -1605,15 +1550,15 @@ function App() {
                   </section>
                 </div>
                 {mobileMergeOrderOpen && (
-                  <button className="fixed inset-0 z-[60] hidden cursor-default bg-slate-950/25 backdrop-blur-[2px] max-[899px]:block" type="button" onClick={() => setMobileMergeOrderOpen(false)} aria-label="关闭合并顺序面板" />
+                  <button className="fixed inset-0 z-[60] hidden cursor-default bg-slate-950/25 backdrop-blur-[2px] max-[900px]:block" type="button" onClick={() => setMobileMergeOrderOpen(false)} aria-label="关闭合并顺序面板" />
                 )}
-                <div className="fixed inset-x-3 bottom-[max(12px,env(safe-area-inset-bottom))] z-50 hidden min-h-[64px] items-center gap-2 rounded-[18px] border border-white/80 bg-white/88 p-2 shadow-[0_18px_46px_rgba(14,116,144,.16)] backdrop-blur-2xl max-[899px]:flex">
-                  <button className="flex min-h-12 min-w-0 flex-1 items-center gap-2 rounded-[12px] px-3 text-left text-sm font-semibold text-ink transition-[background-color,color,transform] duration-150 hover:bg-brand-soft active:scale-[.96]" type="button" onClick={() => setMobileMergeOrderOpen(true)} aria-expanded={mobileMergeOrderOpen} aria-controls="merge-order-panel">
+                <div className="fixed inset-x-3 bottom-[max(12px,env(safe-area-inset-bottom))] z-50 hidden min-h-[64px] items-center gap-2 rounded-2xl border border-line bg-white p-2 shadow-raised max-[900px]:flex">
+                  <button className="flex min-h-12 min-w-0 flex-1 items-center gap-2 rounded-[10px] px-2 text-left text-sm max-[359px]:gap-1 max-[359px]:px-1 font-semibold text-ink transition-[background-color,color,transform] duration-150 hover:bg-brand-soft active:scale-[.96]" type="button" onClick={() => setMobileMergeOrderOpen(true)} aria-expanded={mobileMergeOrderOpen} aria-controls="merge-order-panel">
                     <ListChecks className="shrink-0 text-brand" size={18} />
                     <span className="min-w-0 truncate">合并顺序</span>
                     <span className="ml-auto shrink-0 text-xs font-medium text-muted">{mergeSelectedPages.length} 页</span>
                   </button>
-                  <button className={cx(ui.primaryButton, 'shrink-0 px-5')} type="button" onClick={() => void handleMergeSelected()} disabled={isBusy || mergeSelectedPages.length === 0}>
+                  <button className={cx(ui.primaryButton, 'shrink-0 px-3 max-[359px]:px-2')} type="button" onClick={() => void handleMergeSelected()} disabled={isBusy || mergeSelectedPages.length === 0}>
                     {busy === 'merging' ? <RefreshCw className="animate-spin" size={18} /> : <FileOutput size={18} />}
                     <span className="max-[540px]:hidden">{mergeButtonLabel}</span>
                     <span className="hidden max-[540px]:inline">生成 PDF</span>
@@ -1627,10 +1572,10 @@ function App() {
         {error && <div className="mt-4 flex min-h-12 items-center gap-2.5 rounded-lg border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] text-danger shadow-[0_8px_20px_rgba(196,65,53,.07)]" role="alert"><Info size={18} /><span className="flex-1">{error}</span><button className="grid size-9 place-items-center rounded-md border-0 bg-transparent" type="button" onClick={() => setError('')} aria-label="关闭错误提示"><X size={17} /></button></div>}
 
         {activeOutputs.length > 0 && (
-          <section ref={resultsRef} className={cx(ui.glassPanel, 'mx-auto mt-5 max-w-[1120px] scroll-mt-24 animate-success-morph border-success/15 bg-white/76 p-5.5 max-[540px]:p-4')} aria-labelledby="results-title">
+          <section ref={resultsRef} className={cx(ui.glassPanel, 'site-results mx-auto mt-5 max-w-[1120px] scroll-mt-24 animate-success-morph border-success/15 bg-white p-5.5 max-[540px]:p-4')} aria-labelledby="results-title">
             <div className="flex items-center justify-between gap-6 max-[540px]:flex-col max-[540px]:items-stretch">
               <div className={ui.sectionHeading}>
-                <span className="grid size-11 shrink-0 animate-success-pop place-items-center rounded-[14px] bg-success text-white shadow-[0_8px_20px_rgba(20,122,75,.18)]"><Check size={22} /></span>
+                <span className="grid size-11 shrink-0 animate-success-pop place-items-center rounded-[14px] bg-success-soft text-success"><Check size={22} /></span>
                 <div><h2 className="mb-1 text-[17px] leading-tight font-semibold" id="results-title">{workspaceMode === 'merge' ? '合并完成' : 'PDF 已生成'}</h2><p className="text-xs text-muted">已生成 {activeOutputs.length} 个 PDF 文件 · 共 {activeOutputPageCount} 页</p></div>
               </div>
               <div className="flex shrink-0 items-center gap-2 max-[720px]:flex-wrap max-[540px]:w-full">
@@ -1641,8 +1586,8 @@ function App() {
                       key={option.value}
                       type="button"
                       className={cx(
-                        'min-w-14 rounded-[9px] px-2 text-xs font-semibold text-muted transition-[transform,background-color,color,box-shadow] duration-150 hover:bg-white hover:text-brand active:scale-[.96] disabled:opacity-50',
-                        exportFormat === option.value && 'bg-white text-brand shadow-sm hover:bg-white',
+                        'min-w-14 rounded-lg px-2 text-xs font-medium transition-colors duration-150 disabled:opacity-50',
+                        exportFormat === option.value ? 'bg-white text-brand' : 'text-muted hover:bg-white hover:text-brand',
                       )}
                       onClick={() => setExportFormat(option.value)}
                       disabled={isBusy}
@@ -1698,6 +1643,9 @@ function App() {
             </button>
           </section>
         )}
+        {((workspaceMode === 'split' && !source) || (workspaceMode === 'merge' && mergeSources.length === 0)) && (
+          <p className="site-capabilities">按页数或范围分割<span aria-hidden="true">·</span>跨文件选页合并<span aria-hidden="true">·</span>PDF / JPG / PNG 导出</p>
+        )}
       </main>
 
       {mobileSourceId && (() => {
@@ -1709,21 +1657,21 @@ function App() {
             <div className="flex min-w-0 items-center gap-3"><h2 className="min-w-0 flex-1 truncate font-semibold" title={source.name}>{source.name}</h2><button type="button" className={ui.iconButton} onClick={() => setMobileSourceId(null)} aria-label="关闭选页面板" data-dialog-initial-focus><X size={20} /></button></div>
             <p className="mt-2 text-sm text-muted">选择需要合并的页面 · 已选 {mergeSelectedPages.filter(page => page.sourceId === source.id).length} / {source.pageCount} 页</p>
             <button type="button" className={cx(ui.secondaryButton, 'mt-3 self-start')} disabled={isBusy} onClick={() => { setMergeSelectedPages(current => toggleSourcePages(current, pages)); setMergeOutputs([]) }}>{pages.every(page => mergeSelectedPages.some(selected => selected.id === page.id)) ? '取消全选' : '全选'}</button>
-            <PageEditorGrid pages={pages} selectedIds={mergeSelectedPages.map(page => page.id)} thumbnails={thumbnails} disabled={isBusy} editing={false} showSelection showSourceLabel thumbnailSize={thumbnailSize} scrollClassName="min-h-0 flex-1" onToggle={id => { const page = pages.find(page => page.id === id); if (page) handleToggleMergePage(page) }} onMove={() => {}} onMoveTo={() => {}} onOpen={id => setPreviewContext({ pages, index: pages.findIndex(page => page.id === id), label: source.name, mode: 'merge' })} onRequestThumbnail={requestThumbnail} />
+            <PageEditorGrid pages={pages} selectedIds={mergeSelectedPages.map(page => page.id)} thumbnails={thumbnails} disabled={isBusy} editing={false} showSelection thumbnailSize={thumbnailSize} scrollClassName="min-h-0 flex-1" onToggle={id => { const page = pages.find(page => page.id === id); if (page) handleToggleMergePage(page) }} onMove={() => {}} onMoveTo={() => {}} onOpen={id => setPreviewContext({ pages, index: pages.findIndex(page => page.id === id), label: source.name, mode: 'merge' })} onRequestThumbnail={requestThumbnail} />
             <button type="button" className={cx(ui.primaryButton, 'mt-4')} onClick={() => setMobileSourceId(null)}>完成选页</button>
           </div>
         </div>
       })()}
 
-      <footer className="mx-auto mb-[max(16px,env(safe-area-inset-bottom))] flex min-h-10 items-center justify-center gap-2 rounded-full border border-white/80 bg-white/62 px-4 text-center text-xs text-faint shadow-sm backdrop-blur-xl max-[540px]:max-w-[calc(100%-24px)]" data-app-content><ShieldCheck size={14} className="text-brand" /> 本地处理 · 文件不会上传</footer>
+      <footer className="site-footer" data-app-content><span className="site-footer-brand">PDF Flow</span><span><ShieldCheck size={14} aria-hidden="true" /> 本地处理 · 文件不会上传</span></footer>
 
       {showHistory && (
-        <div className="fixed inset-0 z-60 flex animate-fade-in justify-end bg-slate-950/45 backdrop-blur-[10px]" role="presentation" onMouseDown={() => setShowHistory(false)}>
-          <aside ref={historyDialogRef} className="flex h-full w-[min(430px,100%)] animate-drawer-enter flex-col overscroll-contain border-l border-white/70 bg-[#f7fbfc]/95 shadow-[-18px_0_54px_rgba(16,24,35,.2)] backdrop-blur-[30px] backdrop-saturate-150 max-[540px]:w-full max-[540px]:border-l-0" role="dialog" aria-modal="true" aria-labelledby="history-title" tabIndex={-1} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="fixed inset-0 z-60 flex animate-fade-in justify-end bg-slate-950/40 backdrop-blur-[4px]" role="presentation" onMouseDown={() => setShowHistory(false)}>
+          <aside ref={historyDialogRef} className="flex h-full w-[min(430px,100%)] animate-drawer-enter flex-col overscroll-contain border-l border-white/70 bg-canvas shadow-raised max-[540px]:w-full max-[540px]:border-l-0" role="dialog" aria-modal="true" aria-labelledby="history-title" tabIndex={-1} onMouseDown={(event) => event.stopPropagation()}>
             <div className="flex min-h-[92px] items-center justify-between gap-4 border-b border-black/10 px-5.5 pt-[max(22px,env(safe-area-inset-top))] pb-4.5">
               <div>
                 <p className="m-0 flex items-center gap-1.5 text-xs font-semibold text-brand"><CalendarClock size={15} /> 当前设备</p>
-                <h2 className="mt-1 text-[23px] font-bold" id="history-title">历史记录</h2>
+                <h2 className="mt-1 text-[23px] font-semibold" id="history-title">历史记录</h2>
               </div>
               <button className={ui.iconButton} type="button" onClick={() => setShowHistory(false)} aria-label="关闭历史记录" data-dialog-initial-focus><X size={19} /></button>
             </div>
@@ -1736,8 +1684,8 @@ function App() {
                   <p className="mt-2 max-w-[260px] text-xs leading-relaxed">成功完成一次分割后，记录会保存在这台设备。</p>
                 </div>
               ) : historyEntries.map((entry) => (
-                <article className="relative flex min-h-[108px] animate-history-enter gap-3 overflow-hidden rounded-lg border border-black/10 bg-white/75 py-3.5 pr-2.5 pl-4 shadow-[0_7px_20px_rgba(31,43,58,.055)]" key={entry.id}>
-                  <span className={cx('absolute inset-y-0 left-0 w-1 bg-brand', entry.mode === 'each' && 'bg-success', entry.mode === 'custom' && 'bg-coral')} aria-hidden="true" />
+                <article className="relative flex min-h-[108px] animate-history-enter gap-3 overflow-hidden rounded-lg border border-line bg-white py-3.5 pr-2.5 pl-4" key={entry.id}>
+                  <span className={cx('absolute inset-y-4 left-0 w-0.5 bg-brand', entry.mode === 'each' && 'bg-success', entry.mode === 'custom' && 'bg-coral')} aria-hidden="true" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <strong className="truncate text-sm" title={entry.sourceName}>{entry.sourceName}</strong>
@@ -1751,7 +1699,7 @@ function App() {
                     </div>
                   </div>
                   <button
-                    className={cx(ui.iconButton, 'size-[34px]')}
+                    className={cx(ui.iconButton, 'hover:bg-danger-soft hover:text-danger')}
                     type="button"
                     onClick={() => setHistoryEntries(removeHistory(entry.id))}
                     aria-label={`删除 ${entry.sourceName} 的记录`}
@@ -1845,7 +1793,7 @@ function App() {
 
       {showInstallHelp && (
         <div className="fixed inset-0 z-75 grid animate-fade-in place-items-center bg-slate-950/45 p-5 backdrop-blur-[10px]" role="presentation" onMouseDown={() => setShowInstallHelp(false)}>
-          <div ref={installDialogRef} className="relative w-[min(420px,100%)] animate-preview-enter overscroll-contain rounded-lg border border-white/70 bg-white/95 p-7 text-center shadow-raised" role="dialog" aria-modal="true" aria-labelledby="install-title" tabIndex={-1} onMouseDown={(event) => event.stopPropagation()}>
+          <div ref={installDialogRef} className="relative w-[min(420px,100%)] animate-preview-enter overscroll-contain rounded-2xl border border-line bg-white p-7 text-center shadow-raised" role="dialog" aria-modal="true" aria-labelledby="install-title" tabIndex={-1} onMouseDown={(event) => event.stopPropagation()}>
             <button className={cx(ui.iconButton, 'absolute top-2.5 right-2.5')} type="button" onClick={() => setShowInstallHelp(false)} aria-label="关闭" data-dialog-initial-focus><X size={18} /></button>
             <span className="mx-auto mb-4 grid size-[52px] place-items-center rounded-lg bg-brand-soft text-brand"><Download size={24} /></span>
             <h2 className="text-[21px] font-semibold" id="install-title">安装到设备</h2>
