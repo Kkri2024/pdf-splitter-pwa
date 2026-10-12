@@ -110,3 +110,12 @@ it('unmounts the mobile ordering grid when its panel closes before generation', 
   expect(panel.querySelector('[aria-label^="预览 "]')).toBeNull()
   expect(host.textContent).toContain('merged.pdf')
 })
+it('preserves PDF documents and output when visiting the image workspace', async () => {
+  await upload(); await click('开始分割 · 2 份')
+  await click('合并'); await upload(true)
+  await click('图片拼接')
+  expect(host.querySelector('.stitch-workspace')!.hasAttribute('hidden')).toBe(false)
+  await click('分割'); expect(host.textContent).toContain('output.pdf')
+  expect(host.querySelector('.stitch-workspace')!.hasAttribute('hidden')).toBe(true)
+  await click('合并'); expect(host.textContent).toContain('已选 8 页')
+})

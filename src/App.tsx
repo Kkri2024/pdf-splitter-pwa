@@ -37,6 +37,7 @@ import {
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { pageOwner, removeOwnedEntries, toggleSourcePages, orderPagesBySources } from './lib/workspaceLogic'
+import { ImageStitchWorkspace } from './components/ImageStitchWorkspace'
 import { PageEditorGrid } from './components/PageEditorGrid'
 import { PdfUploadArea } from './components/PdfUploadArea'
 import { copyPdfToClipboard, createFilesZip, createZip, downloadPdf, sharePdf, triggerDownload } from './lib/download'
@@ -171,6 +172,7 @@ function createMergePages(source: MergeSourcePdf): MergePage[] {
 
 function App() {
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('split')
+  const [imageWorkspace, setImageWorkspace] = useState(false)
   const [source, setSource] = useState<SourcePdf | null>(null)
   const [mergeSources, setMergeSources] = useState<MergeSourcePdf[]>([])
   const [mergeSelectedPages, setMergeSelectedPages] = useState<MergePage[]>([])
@@ -1098,22 +1100,30 @@ function App() {
               type="button"
               className={cx(
                 'site-nav-link',
-                workspaceMode === option.value && 'is-active',
+                !imageWorkspace && workspaceMode === option.value && 'is-active',
               )}
               onClick={() => {
+                setImageWorkspace(false)
                 setWorkspaceMode(option.value)
                 setMobileSourceId(null)
                 setMobileSplitSettingsOpen(false)
                 setMobileMergeOrderOpen(false)
                 closePagePreview()
               }}
-              aria-pressed={workspaceMode === option.value}
+              aria-pressed={!imageWorkspace && workspaceMode === option.value}
               title={option.description}
             >
               {option.value === 'split' ? <Scissors size={16} /> : <Layers3 size={16} />}
               <span>{option.value === 'split' ? '分割' : '合并'}</span>
             </button>
           ))}
+          <button type="button" className={cx('site-nav-link', imageWorkspace && 'is-active')} aria-pressed={imageWorkspace} title="把多张图片拼成一张图" onClick={() => {
+            setImageWorkspace(true)
+            setMobileSourceId(null)
+            setMobileSplitSettingsOpen(false)
+            setMobileMergeOrderOpen(false)
+            closePagePreview()
+          }}><FileImage size={16} /><span>图片拼接</span></button>
         </nav>
         <div className={ui.topbarActions}>
           {!online && <span className={cx(ui.statusChip, 'border-amber-700/10 bg-amber-soft text-amber-800')}><WifiOff size={14} /> 离线可用</span>}
@@ -1153,7 +1163,8 @@ function App() {
         </div>
       </header>
 
-      <main id="workspace" tabIndex={-1} className={cx(ui.workspace, 'website-main', ((workspaceMode === 'split' && source) || (workspaceMode === 'merge' && mergeSources.length > 0)) && 'max-[900px]:pb-28')} data-app-content>
+      <main id="workspace" tabIndex={-1} className={cx(ui.workspace, 'website-main', !imageWorkspace && ((workspaceMode === 'split' && source) || (workspaceMode === 'merge' && mergeSources.length > 0)) && 'max-[900px]:pb-28')} data-app-content>
+        <div hidden={imageWorkspace}>
         <section className={cx('site-intro', ((workspaceMode === 'split' && source) || (workspaceMode === 'merge' && mergeSources.length > 0)) && 'site-intro-compact')} aria-labelledby="workspace-heading">
           <h1 id="workspace-heading">{workspaceMode === 'split' ? '分割 PDF' : '合并 PDF'}</h1>
           <p className="site-intro-description">{workspaceMode === 'split' ? '预览每一页，按页数或范围拆分文档。' : '从多份文档中选页，按需要的顺序合为一份。'}</p>
@@ -1646,6 +1657,8 @@ function App() {
         {((workspaceMode === 'split' && !source) || (workspaceMode === 'merge' && mergeSources.length === 0)) && (
           <p className="site-capabilities">按页数或范围分割<span aria-hidden="true">·</span>跨文件选页合并<span aria-hidden="true">·</span>PDF / JPG / PNG 导出</p>
         )}
+        </div>
+        <ImageStitchWorkspace active={imageWorkspace} />
       </main>
 
       {mobileSourceId && (() => {
