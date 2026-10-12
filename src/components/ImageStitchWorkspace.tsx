@@ -5,6 +5,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { ArrowDown, ArrowUp, Download, FileImage, GripVertical, Plus, RotateCw, Share2, Trash2, Undo2, Redo2, ZoomIn, ZoomOut } from 'lucide-react'
 import { createFilesZip, triggerDownload } from '../lib/download'
 import { formatFileSize } from '../lib/format'
+import type { ImageDestination, ImageIntake } from '../lib/imageTools'
 import { canvasBlob, createExportRegions, createStitchLayout, DEFAULT_STITCH_SETTINGS, EMPTY_CROP, importStitchImage, MAX_IMPORT_BYTES, renderStitchCanvas, stitchFileName, type ImageCrop, type StitchImage, type StitchSettings } from '../lib/imageStitch'
 
 interface Snapshot { images: StitchImage[]; settings: StitchSettings }
@@ -35,13 +36,15 @@ function ImageRow({ image, index, count, selected, disabled, onSelect, onMove, o
   </li>
 }
 
-export function ImageStitchWorkspace({ active }: { active: boolean }) {
+export function ImageStitchWorkspace({ active, intake, onConsumed, onContinue, onBusyChange }: { active: boolean; intake?: ImageIntake; onConsumed?: (id: string) => void; onContinue?: (destination: ImageDestination, files: File[]) => void; onBusyChange?: (busy: boolean) => void }) {
   const [timeline, setTimeline] = useState<Timeline>(() => ({ past: [], present: initial(), future: [] }))
   const { images, settings } = timeline.present
   const [selectedId, setSelectedId] = useState('')
   const selected = images.find(image => image.id === selectedId)
   const [busy, setBusy] = useState<'idle' | 'import' | 'export' | 'zip'>('idle')
   const busyRef = useRef(false)
+  const consumed = useRef('')
+  useEffect(() => { onBusyChange?.(busy !== 'idle') }, [busy, onBusyChange])
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [progress, setProgress] = useState('')
@@ -183,6 +186,16 @@ export function ImageStitchWorkspace({ active }: { active: boolean }) {
       setError(failures.join('\n'))
     } finally { if (alive.current) { busyRef.current = false; setBusy('idle'); setProgress('') } }
   }
+
+  useEffect(() => {
+    if (!intake || consumed.current === intake.id || busyRef.current) return
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled || !alive.current || busyRef.current) return
+      consumed.current = intake.id; onConsumed?.(intake.id); void addFiles(intake.files)
+    })
+    return () => { cancelled = true }
+  }, [intake, busy])
 
   const generate = async () => {
     if (busyRef.current || !layoutState.layout || !images.length) return
@@ -337,6 +350,7 @@ export function ImageStitchWorkspace({ active }: { active: boolean }) {
           <div><button type="button" className="stitch-button" disabled={disabled} onClick={() => triggerDownload(result.blob, result.name)} aria-label={`下载 ${result.name}`}><Download size={16} />下载</button>
             <button type="button" className="stitch-button" disabled={disabled} onClick={() => { void share(result) }} aria-label={`分享 ${result.name}`}><Share2 size={16} />分享</button></div>
         </article>)}</div>
+      {onContinue && <div className="tool-continue"><span>继续处理</span>{(['image-pdf', 'image-convert'] as const).map(destination => <button type="button" className="stitch-button" key={destination} disabled={disabled} onClick={() => onContinue(destination, results.map(result => new File([result.blob], result.name, { type: result.blob.type })))}>{destination === 'image-pdf' ? '转为 PDF' : '压缩或转换图片'}</button>)}</div>}
       </section>}
     </>}
     <p className="stitch-privacy">图片只在本设备处理，不上传。编辑内容与结果仅保留在当前页面。</p>

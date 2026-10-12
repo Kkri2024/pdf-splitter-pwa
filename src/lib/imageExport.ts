@@ -68,12 +68,16 @@ export async function renderOutputImages(
   output: SplitOutput,
   format: ImageExportFormat,
   onProgress?: (completed: number, total: number) => void,
+  limits?: { maxBytes: number },
 ): Promise<ImageExportFile[]> {
   const { document } = await loadPdfForPreview(output.bytes)
   const files: ImageExportFile[] = []
+  let bytes = 0
   try {
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const blob = await renderPageToImageBlob(document, pageNumber, format)
+      bytes += blob.size
+      if (limits && bytes > limits.maxBytes) throw new Error('图片总量超过 120 MB，请减少页面后重试')
       files.push({
         name: makeImageOutputName(output.name, pageNumber, document.numPages, format),
         blob,

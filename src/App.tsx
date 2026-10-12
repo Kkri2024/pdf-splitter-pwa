@@ -38,6 +38,8 @@ import { useRegisterSW } from 'virtual:pwa-register/react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { pageOwner, removeOwnedEntries, toggleSourcePages, orderPagesBySources } from './lib/workspaceLogic'
 import { ImageStitchWorkspace } from './components/ImageStitchWorkspace'
+import { ImageToolsWorkspace } from './components/ImageToolsWorkspace'
+import type { ImageDestination, ImageIntake, ImageTool } from './lib/imageTools'
 import { PageEditorGrid } from './components/PageEditorGrid'
 import { PdfUploadArea } from './components/PdfUploadArea'
 import { copyPdfToClipboard, createFilesZip, createZip, downloadPdf, sharePdf, triggerDownload } from './lib/download'
@@ -173,6 +175,12 @@ function createMergePages(source: MergeSourcePdf): MergePage[] {
 function App() {
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('split')
   const [imageWorkspace, setImageWorkspace] = useState(false)
+  const [imageTool, setImageTool] = useState<ImageTool | null>(null)
+  const auxiliaryActive = imageWorkspace || imageTool !== null
+  const [imageIntakes, setImageIntakes] = useState<Partial<Record<ImageDestination, ImageIntake>>>({})
+  const [stitchBusy, setStitchBusy] = useState(false)
+  const [pdfImageBusy, setPdfImageBusy] = useState(false)
+  const [convertBusy, setConvertBusy] = useState(false)
   const [source, setSource] = useState<SourcePdf | null>(null)
   const [mergeSources, setMergeSources] = useState<MergeSourcePdf[]>([])
   const [mergeSelectedPages, setMergeSelectedPages] = useState<MergePage[]>([])
@@ -886,6 +894,52 @@ function App() {
     }
   }
 
+  const continueImages = (destination: ImageDestination, files: File[]) => {
+    if (!files.length || busy !== 'idle' || stitchBusy || pdfImageBusy || convertBusy) return
+    setImageIntakes(current => ({ ...current, [destination]: { id: crypto.randomUUID(), files } }))
+    setImageWorkspace(destination === 'stitch')
+    setImageTool(destination === 'stitch' ? null : destination)
+    setMobileSourceId(null); setMobileSplitSettingsOpen(false); setMobileMergeOrderOpen(false); closePagePreview()
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const consumeImages = useCallback((destination: ImageDestination, id: string) => {
+    setImageIntakes(current => {
+      if (current[destination]?.id !== id) return current
+      const next = { ...current }; delete next[destination]; return next
+    })
+  }, [])
+  const consumeStitch = useCallback((id: string) => consumeImages('stitch', id), [consumeImages])
+  const consumePdfImages = useCallback((id: string) => consumeImages('image-pdf', id), [consumeImages])
+  const consumeConvert = useCallback((id: string) => consumeImages('image-convert', id), [consumeImages])
+  const continuePdfMerge = async (files: File[]) => {
+    if (busy !== 'idle' || stitchBusy || pdfImageBusy || convertBusy) return
+    setImageWorkspace(false); setImageTool(null); setWorkspaceMode('merge')
+    closePagePreview(); setMobileSourceId(null); setMobileSplitSettingsOpen(false); setMobileMergeOrderOpen(false)
+    await processMergeFiles(files)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const continueOutputs = async (selectedOutputs: SplitOutput[], destination: ImageDestination) => {
+    if (busy !== 'idle' || stitchBusy || pdfImageBusy || convertBusy) return
+    setBusy('zipping'); setError(''); closePagePreview()
+    try {
+      const pages = selectedOutputs.reduce((sum, output) => sum + output.pageCount, 0)
+      if (pages > 100) throw new Error('一次最多接续 100 页，请先分割或减少页面')
+      const files: File[] = []
+      let bytes = 0
+      for (const [index, output] of selectedOutputs.entries()) {
+        const rendered = await renderOutputImages(output, 'png', (current, total) => setImageProgress({ current, total }), { maxBytes: 120 * 1024 * 1024 - bytes })
+        for (const file of rendered) {
+          bytes += file.blob.size
+          files.push(new File([file.blob], `${index + 1}-${file.name.replaceAll('/', '-')}`, { type: file.blob.type }))
+        }
+      }
+      setImageIntakes(current => ({ ...current, [destination]: { id: crypto.randomUUID(), files } }))
+      setImageWorkspace(destination === 'stitch'); setImageTool(destination === 'stitch' ? null : destination)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } catch (error) { setError(getErrorMessage(error)) }
+    finally { setBusy('idle'); setImageProgress({ current: 0, total: 0 }) }
+  }
+
   const handleDownloadOutput = async (output: SplitOutput) => {
     if (busy !== 'idle') return
     if (exportFormat === 'pdf') {
@@ -1098,32 +1152,39 @@ function App() {
             <button
               key={option.value}
               type="button"
+              disabled={isBusy || stitchBusy || pdfImageBusy || convertBusy}
               className={cx(
                 'site-nav-link',
-                !imageWorkspace && workspaceMode === option.value && 'is-active',
+                !auxiliaryActive && workspaceMode === option.value && 'is-active',
               )}
               onClick={() => {
                 setImageWorkspace(false)
+                setImageTool(null)
                 setWorkspaceMode(option.value)
                 setMobileSourceId(null)
                 setMobileSplitSettingsOpen(false)
                 setMobileMergeOrderOpen(false)
                 closePagePreview()
               }}
-              aria-pressed={!imageWorkspace && workspaceMode === option.value}
+              aria-pressed={!auxiliaryActive && workspaceMode === option.value}
               title={option.description}
             >
               {option.value === 'split' ? <Scissors size={16} /> : <Layers3 size={16} />}
               <span>{option.value === 'split' ? '分割' : '合并'}</span>
             </button>
           ))}
-          <button type="button" className={cx('site-nav-link', imageWorkspace && 'is-active')} aria-pressed={imageWorkspace} title="把多张图片拼成一张图" onClick={() => {
+          <button type="button" disabled={isBusy || stitchBusy || pdfImageBusy || convertBusy} className={cx('site-nav-link', imageWorkspace && 'is-active')} aria-pressed={imageWorkspace} title="把多张图片拼成一张图" onClick={() => {
             setImageWorkspace(true)
+            setImageTool(null)
             setMobileSourceId(null)
             setMobileSplitSettingsOpen(false)
             setMobileMergeOrderOpen(false)
             closePagePreview()
           }}><FileImage size={16} /><span>图片拼接</span></button>
+          {([{ value: 'image-pdf', label: '图片转 PDF' }, { value: 'image-convert', label: '图片压缩' }] as const).map(option => <button type="button" key={option.value} disabled={isBusy || stitchBusy || pdfImageBusy || convertBusy} className={cx('site-nav-link', imageTool === option.value && 'is-active')} aria-pressed={imageTool === option.value} onClick={() => {
+            setImageWorkspace(false); setImageTool(option.value)
+            setMobileSourceId(null); setMobileSplitSettingsOpen(false); setMobileMergeOrderOpen(false); closePagePreview()
+          }}><FileImage size={16} /><span>{option.label}</span></button>)}
         </nav>
         <div className={ui.topbarActions}>
           {!online && <span className={cx(ui.statusChip, 'border-amber-700/10 bg-amber-soft text-amber-800')}><WifiOff size={14} /> 离线可用</span>}
@@ -1163,8 +1224,8 @@ function App() {
         </div>
       </header>
 
-      <main id="workspace" tabIndex={-1} className={cx(ui.workspace, 'website-main', !imageWorkspace && ((workspaceMode === 'split' && source) || (workspaceMode === 'merge' && mergeSources.length > 0)) && 'max-[900px]:pb-28')} data-app-content>
-        <div hidden={imageWorkspace}>
+      <main id="workspace" tabIndex={-1} className={cx(ui.workspace, 'website-main', !auxiliaryActive && ((workspaceMode === 'split' && source) || (workspaceMode === 'merge' && mergeSources.length > 0)) && 'max-[900px]:pb-28')} data-app-content>
+        <div hidden={auxiliaryActive}>
         <section className={cx('site-intro', ((workspaceMode === 'split' && source) || (workspaceMode === 'merge' && mergeSources.length > 0)) && 'site-intro-compact')} aria-labelledby="workspace-heading">
           <h1 id="workspace-heading">{workspaceMode === 'split' ? '分割 PDF' : '合并 PDF'}</h1>
           <p className="site-intro-description">{workspaceMode === 'split' ? '预览每一页，按页数或范围拆分文档。' : '从多份文档中选页，按需要的顺序合为一份。'}</p>
@@ -1642,12 +1703,18 @@ function App() {
                       <div className="absolute right-0 bottom-12 z-30 flex w-44 flex-col gap-1 rounded-xl border border-black/10 bg-white p-2 shadow-raised">
                         <button type="button" className={ui.secondaryButton} disabled={isBusy} onClick={() => void handleCopyOutput(output)}><Copy size={16} />复制 PDF</button>
                         <button type="button" className={ui.secondaryButton} disabled={isBusy} onClick={async () => { try { await navigator.clipboard.writeText(output.name); setCopyNotice('文件名已复制'); setCopyNameOutput(null) } catch { setCopyNotice('无法访问剪贴板，请手动复制文件名') } }}>复制文件名</button>
+                        <button type="button" className={ui.secondaryButton} disabled={isBusy || stitchBusy || pdfImageBusy || convertBusy} onClick={() => void continueOutputs([output], 'stitch')}>转图后拼接</button>
+                        <button type="button" className={ui.secondaryButton} disabled={isBusy || stitchBusy || pdfImageBusy || convertBusy} onClick={() => void continueOutputs([output], 'image-convert')}>转图后压缩</button>
                         <button type="button" className={ui.secondaryButton} disabled={isBusy} onClick={() => void handleShareOutput(output)}><Share2 size={16} />分享 PDF</button>
                       </div>
                     </details>
                   </div>
                 </div>
               )})}
+            </div>
+            <div className="tool-continue"><span>继续处理全部结果</span>
+              {workspaceMode === 'split' && <button type="button" className="stitch-button" disabled={isBusy || stitchBusy || pdfImageBusy || convertBusy} onClick={() => { void continuePdfMerge(activeOutputs.map(output => new File([output.bytes as Uint8Array<ArrayBuffer>], output.name, { type: 'application/pdf' }))) }}>加入 PDF 合并</button>}
+              <button type="button" className="stitch-button" disabled={isBusy || stitchBusy || pdfImageBusy || convertBusy} onClick={() => { void continueOutputs(activeOutputs, 'stitch') }}>全部转图后拼接</button>
             </div>
             <button className={cx(ui.secondaryButton, 'mt-5 max-[540px]:w-full')} type="button" onClick={workspaceMode === 'merge' ? clearMergeWorkspace : clearAll} title={workspaceMode === 'merge' ? '清空多 PDF 合并工作区' : '重新选择 PDF 文件'}>
               <PackageOpen size={18} /> {workspaceMode === 'merge' ? '处理另一组合并' : '处理另一个文件'}
@@ -1658,7 +1725,9 @@ function App() {
           <p className="site-capabilities">按页数或范围分割<span aria-hidden="true">·</span>跨文件选页合并<span aria-hidden="true">·</span>PDF / JPG / PNG 导出</p>
         )}
         </div>
-        <ImageStitchWorkspace active={imageWorkspace} />
+        <ImageStitchWorkspace active={imageWorkspace} intake={imageIntakes.stitch} onConsumed={consumeStitch} onContinue={continueImages} onBusyChange={setStitchBusy} />
+        <ImageToolsWorkspace active={imageTool === 'image-pdf'} tool="image-pdf" intake={imageIntakes['image-pdf']} onConsumed={consumePdfImages} onBusyChange={setPdfImageBusy} onContinue={continueImages} onPdfContinue={files => { void continuePdfMerge(files) }} />
+        <ImageToolsWorkspace active={imageTool === 'image-convert'} tool="image-convert" intake={imageIntakes['image-convert']} onConsumed={consumeConvert} onBusyChange={setConvertBusy} onContinue={continueImages} onPdfContinue={files => { void continuePdfMerge(files) }} />
       </main>
 
       {mobileSourceId && (() => {
